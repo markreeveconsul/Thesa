@@ -42,6 +42,7 @@ beforeAll(async () => {
     "202610110002_storage.sql",
     "202610110003_editor.sql",
     "202610190001_cloud_sources.sql",
+    "202611210001_feasibility_assessments.sql",
   ]) {
     await db.exec(
       readFileSync(resolve("../supabase/migrations", file), "utf8"),
@@ -86,7 +87,7 @@ describe("executed PostgreSQL ownership policies", () => {
     }>(
       "select relname,relrowsecurity,relforcerowsecurity from pg_class join pg_namespace n on n.oid=relnamespace where n.nspname='public' and relkind='r'",
     );
-    expect(rows.length).toBe(7);
+    expect(rows.length).toBe(8);
     expect(
       rows.every((row) => row.relrowsecurity && row.relforcerowsecurity),
     ).toBe(true);
@@ -102,6 +103,27 @@ describe("executed PostgreSQL ownership policies", () => {
         (await db.query("select title from public.projects")).rows,
       ).toEqual([{ title: "B thesis" }]),
     );
+  });
+  it("isolates feasibility reports by project owner and permits owner deletion", async () => {
+    const assessmentId = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
+    await asUser(A, async () => {
+      await db.query(
+        "insert into public.feasibility_assessments(id,project_id,inputs,report) values ($1,$2,'{}','{}')",
+        [assessmentId, PA],
+      );
+      expect((await db.query("select id from public.feasibility_assessments")).rows).toEqual([{ id: assessmentId }]);
+    });
+    await asUser(B, async () => {
+      expect((await db.query("select id from public.feasibility_assessments")).rows).toEqual([]);
+      await expect(db.query(
+        "insert into public.feasibility_assessments(project_id,inputs,report) values ($1,'{}','{}')",
+        [PA],
+      )).rejects.toThrow(/row-level security/i);
+    });
+    await asUser(A, async () => {
+      await db.query("delete from public.feasibility_assessments where id=$1", [assessmentId]);
+      expect((await db.query("select id from public.feasibility_assessments")).rows).toEqual([]);
+    });
   });
   it("allows owned creation but rejects forged ownership", async () => {
     await asUser(A, async () => {

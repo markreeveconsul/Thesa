@@ -8,6 +8,7 @@ import {
   ArrowDown,
   Upload,
   Library,
+  ClipboardCheck,
 } from "lucide-react";
 import type { Project, Section } from "@/lib/workspace";
 export function ChapterNavigation({
@@ -19,6 +20,7 @@ export function ChapterNavigation({
   onAdd,
   onReorder,
   onSources,
+  onFeasibility,
   busy,
 }: {
   project: Project;
@@ -29,6 +31,7 @@ export function ChapterNavigation({
   onAdd: (title: string) => void;
   onReorder: (sections: Section[]) => void;
   onSources: () => void;
+  onFeasibility: () => void;
   busy: boolean;
 }) {
   const [adding, setAdding] = useState(false),
@@ -152,6 +155,12 @@ export function ChapterNavigation({
             Add chapter
           </button>
         )}
+        <div className="source-nav">
+          <div className="section-label">Research tools</div>
+          <button className="nav-help feasibility-nav" onClick={onFeasibility}>
+            <ClipboardCheck size={16} /> Feasibility check
+          </button>
+        </div>
         <div className="source-nav">
           <div className="section-label">Sources ({sourceCount})</div>
           <p>Your evidence, close at hand.</p>
