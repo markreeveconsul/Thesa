@@ -35,7 +35,9 @@ if not (1 <= MAX_BYTES <= 100 * 1024 * 1024 and 1 <= MAX_PAGES <= 1000 and 1 <= 
 slots = asyncio.Semaphore(2)
 app = FastAPI(title="Thesa document service", docs_url=None, redoc_url=None)
 from .chat import router as chat_router
+from .feasibility import router as feasibility_router
 app.include_router(chat_router)
+app.include_router(feasibility_router)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["localhost", "127.0.0.1", "[::1]", "testserver"])
 app.add_middleware(CORSMiddleware, allow_origins=ORIGINS, allow_methods=["GET", "POST"], allow_headers=["Content-Type", "X-Filename"])
 

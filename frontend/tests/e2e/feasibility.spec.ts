@@ -43,7 +43,7 @@ test("feasibility intake creates, persists, and deletes a saved review", async (
   await page.locator(".feasibility-consent input").check();
   await page.getByRole("button", { name: "Create feasibility review" }).click();
   await expect(page.getByText(report.summary)).toBeVisible();
-  await expect(page.getByText("Choose a study design.")).toBeVisible();
+  await expect(page.locator(".feasibility-fix-card h4", { hasText: "Choose a study design." })).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "Feasibility check", exact: true }).click();
   await expect(page.getByText("Previous reviews")).toBeVisible();

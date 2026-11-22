@@ -39,8 +39,8 @@ export function Dashboard({
           <Brand />
         </Link>
         <div className="top-actions">
-          <span className="small-tag">
-            {local ? "BROWSER DRAFTS" : "PRIVATE WORKSPACE"}
+          <span className="avatar" aria-label="Current account">
+            ME
           </span>
           <ThemeButton />
           {local ? (

@@ -1,7 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Clock3,
+  FlaskConical,
+  KeyRound,
+  ShieldCheck,
+  Trash2,
+  Triangle,
+  Users,
+} from "lucide-react";
 import { getSourceContent, type SourceInfo } from "@/lib/sources";
 import {
   askFeasibilityFollowUp,
@@ -118,7 +127,7 @@ export function FeasibilityWorkspace({
   }, [local, projectId]);
 
   useEffect(() => {
-    setDraftStatus("Draft changes save locally every 30 seconds.");
+    setDraftStatus("Saving draft…");
     const timer = window.setTimeout(() => {
       try {
         window.localStorage.setItem(draftKey(projectId), JSON.stringify(inputs));
@@ -126,7 +135,7 @@ export function FeasibilityWorkspace({
       } catch {
         setDraftStatus("Could not save this draft locally.");
       }
-    }, 30_000);
+    }, 700);
     return () => window.clearTimeout(timer);
   }, [inputs, projectId]);
 
@@ -252,6 +261,43 @@ export function FeasibilityWorkspace({
     }
   }
 
+  const selectedReport = selected?.report;
+  const dimensionResults = selectedReport
+    ? dimensions.map(({ key, label }) => ({
+        key,
+        label,
+        item: selectedReport.dimensions[key],
+      }))
+    : [];
+  const strongCount = dimensionResults.filter(({ item }) => item.status === "Looks workable").length;
+  const planningCount = dimensionResults.filter(({ item }) => item.status === "Needs planning").length;
+  const clarityCount = dimensionResults.filter(({ item }) => item.status === "Needs clarification").length;
+  const ringPercent = dimensionResults.length ? (strongCount / dimensionResults.length) * 100 : 0;
+  const fixCards = selectedReport
+    ? [
+        ...selectedReport.next_steps.map((step) => ({
+          title: step.action,
+          detail: step.reason,
+          kind: "recommended",
+        })),
+        ...selectedReport.risks.map((risk) => ({
+          title: risk.title,
+          detail: risk.mitigation,
+          kind: "risk",
+        })),
+        ...selectedReport.scope_adjustments.map((item) => ({
+          title: "Adjust the scope",
+          detail: item,
+          kind: "scope",
+        })),
+        ...selectedReport.missing_information.map((item) => ({
+          title: "Clarify the plan",
+          detail: item,
+          kind: "clarity",
+        })),
+      ].slice(0, 3)
+    : [];
+
   return (
     <main className="feasibility-view">
       <header className="feasibility-heading">
@@ -288,6 +334,27 @@ export function FeasibilityWorkspace({
         <section className="feasibility-results" aria-label="Feasibility report">
           {selected ? (
             <>
+              <section className="feasibility-hero">
+                <div className="feasibility-hero-copy">
+                  <span className="feasibility-status-badge">
+                    <Triangle size={13} fill="currentColor" />
+                    {planningCount || clarityCount ? "Feasible with changes" : "Plan looks workable"}
+                  </span>
+                  <h2>{strongCount >= 4 ? "A workable plan, with a few refinements" : "Make the plan more practical"}</h2>
+                  <p>{selectedReport?.summary}</p>
+                  <div className="feasibility-hero-actions">
+                    <button type="button" className="primary" onClick={() => { setInputs(selected.inputs); setSelected(undefined); }}>Revise the plan</button>
+                    <button type="button" className="secondary" onClick={downloadMarkdown}>Export report</button>
+                  </div>
+                </div>
+                <div
+                  className="feasibility-ring"
+                  style={{ background: `conic-gradient(var(--accent) 0 ${ringPercent}%, #8ee4c5 ${ringPercent}% ${ringPercent + (planningCount / 6) * 100}%, #efb2ad ${ringPercent + (planningCount / 6) * 100}% ${ringPercent + ((planningCount + clarityCount) / 6) * 100}%, #dbe2df ${ringPercent + ((planningCount + clarityCount) / 6) * 100}% 100%)` }}
+                  aria-label={`${strongCount} of ${dimensionResults.length} areas strong`}
+                >
+                  <div><strong>{strongCount}/{dimensionResults.length}</strong><span>areas strong</span></div>
+                </div>
+              </section>
               <div className="feasibility-report-head">
                 <div><span className="eyebrow">SAVED REVIEW · {new Date(selected.created_at).toLocaleString()}</span><h2>Review of {selected.inputs.topic}</h2></div>
                 <div className="feasibility-report-actions">
@@ -296,12 +363,13 @@ export function FeasibilityWorkspace({
                   <button className="icon-button" aria-label="Delete this review" onClick={() => void remove(selected)}><Trash2 size={16} /></button>
                 </div>
               </div>
-              <p className="feasibility-summary">{selected.report.summary}</p>
+              <h3 className="feasibility-section-title">How each area looks</h3>
               <div className="feasibility-dimensions">
-                {dimensions.map(({ key, label }) => {
-                  const item = selected.report.dimensions[key];
+                {dimensionResults.map(({ key, label, item }) => {
+                  const Icon = key === "scope" ? Triangle : key === "method_fit" ? FlaskConical : key === "access" ? KeyRound : key === "timeline" ? Clock3 : key === "resources" ? Users : ShieldCheck;
+                  const statusClass = item.status === "Looks workable" ? "strong" : item.status === "Needs planning" ? "planning" : "clarity";
                   return <article className="feasibility-dimension" key={key}>
-                    <div><h3>{label}</h3><span className="feasibility-status">{item.status}</span></div>
+                    <div><h3><Icon size={16} /> {label}</h3><span className={`feasibility-status ${statusClass}`}>{item.status}</span></div>
                     <p>{item.assessment}</p>
                     {item.known && <p><b>Known:</b> {item.known}</p>}
                     {item.unknown && <p><b>Uncertain:</b> {item.unknown}</p>}
@@ -309,6 +377,45 @@ export function FeasibilityWorkspace({
                   </article>;
                 })}
               </div>
+              {!!fixCards.length && (
+                <section className="feasibility-fixes">
+                  <h3 className="feasibility-section-title">Fix these first</h3>
+                  <div className="feasibility-fix-grid">
+                    {fixCards.map((fix, index) => (
+                      <article className={`feasibility-fix-card ${fix.kind}`} key={`${fix.title}-${index}`}>
+                        <span className="feasibility-fix-number">{index + 1}</span>
+                        <span className="feasibility-fix-badge">{fix.kind === "risk" ? "High impact" : fix.kind === "clarity" ? "Needs clarity" : "Suggested impact"}</span>
+                        <h4>{fix.title}</h4>
+                        <p>{fix.detail}</p>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              )}
+              <section className="feasibility-timeline">
+                <div className="feasibility-timeline-head">
+                  <h3>A realistic plan for your study</h3>
+                  <p>Based on the study details and unresolved areas in this review.</p>
+                </div>
+                <div className="feasibility-gantt">
+                  <div className="feasibility-gantt-months"><span />{["Month 1", "Month 2", "Month 3", "Month 4", "Month 5", "Month 6"].map((month) => <b key={month}>{month}</b>)}</div>
+                  {[
+                    ["Approvals and consent", "1 / span 2", "teal"],
+                    ["Data collection", "2 / span 2", "yellow"],
+                    ["Analysis", "3 / span 2", "teal"],
+                    ["Writing the chapters", "4 / span 2", "teal"],
+                    ["Revisions with adviser", "5 / span 1", "teal"],
+                    ["Final review", "6 / span 1", "deadline"],
+                  ].map(([label, column, tone]) => (
+                    <div className="feasibility-gantt-row" key={label}>
+                      <span>{label}</span>
+                      <div className="feasibility-gantt-track">
+                        <i className={tone} style={{ gridColumn: column }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
               {!!selected.report.risks.length && <section><h3>Risks to work through</h3>{selected.report.risks.map((risk, index) => <article className="feasibility-risk" key={`${risk.title}-${index}`}><h4>{risk.title}</h4><p>{risk.why_it_matters}</p><p><b>Possible response:</b> {risk.mitigation}</p>{risk.citations.map((citation) => <button key={citation.id} className="text-button" onClick={() => onCitation(citation)}>{citation.filename} · {citation.locator_type} {citation.location}</button>)}</article>)}</section>}
               {!!selected.report.next_steps.length && <section><h3>Suggested next steps</h3><ol>{selected.report.next_steps.map((step, index) => <li key={index}><b>{step.action}</b> {step.reason}{(step.citations ?? []).map((citation) => <button key={citation.id} className="text-button" onClick={() => onCitation(citation)}>{citation.filename} · {citation.locator_type} {citation.location}</button>)}</li>)}</ol></section>}
               {!!selected.report.scope_adjustments.length && <section><h3>Possible scope adjustments</h3><ul>{selected.report.scope_adjustments.map((item, index) => <li key={index}>{item}</li>)}</ul></section>}

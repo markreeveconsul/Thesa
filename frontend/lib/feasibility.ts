@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SourceContent } from "./sources";
+import type { Citation } from "./chat";
 
 export const feasibilityInputsSchema = z.object({
   topic: z.string().trim().min(1, "Enter a topic or working title.").max(300),
@@ -109,7 +110,7 @@ export async function askFeasibilityFollowUp(
   dimension: string,
   question: string,
   assessment: FeasibilityAssessment,
-  evidence: unknown[],
+  evidence: Citation[],
   signal: AbortSignal,
 ): Promise<string> {
   const base = process.env.NEXT_PUBLIC_DOCUMENT_API_URL || "http://127.0.0.1:8000";
@@ -120,8 +121,7 @@ export async function askFeasibilityFollowUp(
     body: JSON.stringify({
       dimension,
       question,
-      inputs: assessment.inputs,
-      report: assessment.report,
+      assessment,
       evidence,
     }),
   });
