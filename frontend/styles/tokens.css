@@ -11,11 +11,16 @@
   --accent: #0a7f5a;
   --accent-hover: #06583f;
   --accent-soft: #e6f5ef;
-  --on-accent: #fffaf6;
+  --on-accent: #ffffff;
   --success: #4d6954;
   --note: #f4efe2;
   --note-line: #b19b6b;
   --danger: #a42f32;
+  --highlight: #ffe98a;
+  --warning: #fff1b8;
+  --warning-text: #7a5a00;
+  --risk: #fdecec;
+  --risk-text: #a12027;
   --shadow: 0 4px 28px #272c2210;
   --overlay: #171b2459;
   --serif: "Source Serif 4", Georgia, serif;

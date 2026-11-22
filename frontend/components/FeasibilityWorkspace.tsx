@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { getSourceContent, type SourceInfo } from "@/lib/sources";
 import {
+  askFeasibilityFollowUp,
+  buildFeasibilityMarkdown,
   feasibilityInputsSchema,
   runFeasibility,
   type FeasibilityAssessment,
@@ -50,6 +52,7 @@ const dimensions: { key: keyof FeasibilityReport["dimensions"]; label: string }[
   { key: "ethics", label: "Ethics" },
 ];
 const localKey = (projectId: string) => `thesa-feasibility-${projectId}`;
+const draftKey = (projectId: string) => `thesa-feasibility-draft-${projectId}`;
 
 export function FeasibilityWorkspace({
   projectId,
@@ -68,13 +71,29 @@ export function FeasibilityWorkspace({
   onBack: () => void;
   onCitation: (citation: Citation) => void;
 }) {
-  const [inputs, setInputs] = useState<FeasibilityInputs>({ ...blank, topic: projectTitle, research_problem: researchProblem ?? "" });
+  const [inputs, setInputs] = useState<FeasibilityInputs>(() => {
+    const fallback = { ...blank, topic: projectTitle, research_problem: researchProblem ?? "" };
+    if (typeof window === "undefined") return fallback;
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(draftKey(projectId)) || "null") as FeasibilityInputs | null;
+      if (!saved) return fallback;
+      const parsed = feasibilityInputsSchema.partial().safeParse(saved);
+      return parsed.success ? { ...fallback, ...parsed.data } : fallback;
+    } catch {
+      return fallback;
+    }
+  });
   const [assessments, setAssessments] = useState<FeasibilityAssessment[]>([]);
   const [selected, setSelected] = useState<FeasibilityAssessment>();
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [status, setStatus] = useState("");
+  const [draftStatus, setDraftStatus] = useState("");
+  const [followUpDimension, setFollowUpDimension] = useState("timeline");
+  const [followUpQuestion, setFollowUpQuestion] = useState("");
+  const [followUpAnswer, setFollowUpAnswer] = useState("");
+  const [followUpBusy, setFollowUpBusy] = useState(false);
   const activeRequest = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -97,6 +116,19 @@ export function FeasibilityWorkspace({
     void load();
     return () => { alive = false; };
   }, [local, projectId]);
+
+  useEffect(() => {
+    setDraftStatus("Saving draft…");
+    const timer = window.setTimeout(() => {
+      try {
+        window.localStorage.setItem(draftKey(projectId), JSON.stringify(inputs));
+        setDraftStatus("Draft saved locally.");
+      } catch {
+        setDraftStatus("Could not save this draft locally.");
+      }
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [inputs, projectId]);
 
   function update(key: keyof FeasibilityInputs, value: string) {
     setInputs((current) => ({ ...current, [key]: value }));
@@ -150,6 +182,8 @@ export function FeasibilityWorkspace({
       setStatus("Groq is preparing your feasibility review…");
       const report = await runFeasibility(projectId, parsed.data, contents, controller.signal);
       await save(parsed.data, report);
+      window.localStorage.removeItem(draftKey(projectId));
+      setDraftStatus("Submitted draft cleared.");
       setStatus("Review saved.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Could not complete the feasibility review.");
@@ -172,6 +206,50 @@ export function FeasibilityWorkspace({
       setAssessments((items) => items.filter((item) => item.id !== assessment.id));
     }
     if (selected?.id === assessment.id) setSelected(undefined);
+  }
+
+  async function copyMarkdown() {
+    if (!selected) return;
+    try {
+      await navigator.clipboard.writeText(buildFeasibilityMarkdown(selected));
+      setStatus("Markdown copied.");
+    } catch {
+      setError("Could not copy the report to the clipboard.");
+    }
+  }
+
+  function downloadMarkdown() {
+    if (!selected) return;
+    const blob = new Blob([buildFeasibilityMarkdown(selected)], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `feasibility-${selected.inputs.topic.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80) || "review"}.md`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function askFollowUp() {
+    if (!selected || !followUpQuestion.trim()) return;
+    setFollowUpBusy(true);
+    setFollowUpAnswer("");
+    setError("");
+    try {
+      const dimension = selected.report.dimensions[followUpDimension as keyof FeasibilityReport["dimensions"]];
+      const evidence = [...dimension.citations];
+      const answer = await askFeasibilityFollowUp(
+        followUpDimension,
+        followUpQuestion,
+        selected,
+        evidence,
+        new AbortController().signal,
+      );
+      setFollowUpAnswer(answer);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Could not answer the follow-up.");
+    } finally {
+      setFollowUpBusy(false);
+    }
   }
 
   return (
@@ -203,6 +281,7 @@ export function FeasibilityWorkspace({
           </label>
           <button className="primary" disabled={busy || !consent || !inputs.topic.trim()}>{busy ? "Reviewing…" : "Create feasibility review"}</button>
           {busy && <button type="button" className="text-button" onClick={() => activeRequest.current?.abort()}>Cancel review</button>}
+          <p className="feasibility-draft-status" role="status" aria-live="polite">{draftStatus}</p>
           <p role="status" aria-live="polite">{status}</p>
           {error && <p className="feasibility-error" role="alert">{error}</p>}
         </form>
@@ -211,7 +290,11 @@ export function FeasibilityWorkspace({
             <>
               <div className="feasibility-report-head">
                 <div><span className="eyebrow">SAVED REVIEW · {new Date(selected.created_at).toLocaleString()}</span><h2>Review of {selected.inputs.topic}</h2></div>
-                <button className="icon-button" aria-label="Delete this review" onClick={() => void remove(selected)}><Trash2 size={16} /></button>
+                <div className="feasibility-report-actions">
+                  <button type="button" className="secondary" onClick={() => void copyMarkdown()}>Copy Markdown</button>
+                  <button type="button" className="secondary" onClick={downloadMarkdown}>Download .md</button>
+                  <button className="icon-button" aria-label="Delete this review" onClick={() => void remove(selected)}><Trash2 size={16} /></button>
+                </div>
               </div>
               <p className="feasibility-summary">{selected.report.summary}</p>
               <div className="feasibility-dimensions">
@@ -227,9 +310,25 @@ export function FeasibilityWorkspace({
                 })}
               </div>
               {!!selected.report.risks.length && <section><h3>Risks to work through</h3>{selected.report.risks.map((risk, index) => <article className="feasibility-risk" key={`${risk.title}-${index}`}><h4>{risk.title}</h4><p>{risk.why_it_matters}</p><p><b>Possible response:</b> {risk.mitigation}</p>{risk.citations.map((citation) => <button key={citation.id} className="text-button" onClick={() => onCitation(citation)}>{citation.filename} · {citation.locator_type} {citation.location}</button>)}</article>)}</section>}
-              {!!selected.report.next_steps.length && <section><h3>Suggested next steps</h3><ol>{selected.report.next_steps.map((step, index) => <li key={index}><b>{step.action}</b> {step.reason}</li>)}</ol></section>}
+              {!!selected.report.next_steps.length && <section><h3>Suggested next steps</h3><ol>{selected.report.next_steps.map((step, index) => <li key={index}><b>{step.action}</b> {step.reason}{(step.citations ?? []).map((citation) => <button key={citation.id} className="text-button" onClick={() => onCitation(citation)}>{citation.filename} · {citation.locator_type} {citation.location}</button>)}</li>)}</ol></section>}
               {!!selected.report.scope_adjustments.length && <section><h3>Possible scope adjustments</h3><ul>{selected.report.scope_adjustments.map((item, index) => <li key={index}>{item}</li>)}</ul></section>}
               {!!selected.report.missing_information.length && <section><h3>Still to clarify</h3><ul>{selected.report.missing_information.map((item, index) => <li key={index}>{item}</li>)}</ul></section>}
+              <section className="feasibility-follow-up">
+                <h3>Ask about a dimension</h3>
+                <p>Get a practical follow-up about a specific part of the review.</p>
+                <label>
+                  <span>Dimension</span>
+                  <select value={followUpDimension} onChange={(event) => setFollowUpDimension(event.target.value)}>
+                    {dimensions.map(({ key, label }) => <option key={key} value={key}>{label}</option>)}
+                  </select>
+                </label>
+                <label>
+                  <span>Question</span>
+                  <textarea rows={3} maxLength={2000} placeholder="Why is timeline marked Needs planning? What should I change?" value={followUpQuestion} onChange={(event) => setFollowUpQuestion(event.target.value)} />
+                </label>
+                <button type="button" className="secondary" disabled={followUpBusy || !followUpQuestion.trim()} onClick={() => void askFollowUp()}>{followUpBusy ? "Thinking…" : "Ask Otto"}</button>
+                {followUpAnswer && <article className="feasibility-follow-up-answer"><b>Otto:</b> {followUpAnswer}</article>}
+              </section>
               <button className="secondary" onClick={() => { setInputs(selected.inputs); setSelected(undefined); }}>Revise answers and run again</button>
             </>
           ) : (

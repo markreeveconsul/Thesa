@@ -35,20 +35,20 @@ export function AuthForm({
         <section className="auth-intro">
           <h1>Your thesis, backed by every source you read.</h1>
           <p>
-            A thoughtful space to write, connect your sources, and develop your
-            thesis—one paragraph at a time.
+            Chat with your PDFs, draft chapter by chapter, and keep every
+            paragraph tied to your research problem.
           </p>
           <div className="auth-manuscript">
             <Otto animate />
-            <span className="eyebrow">ILLUSTRATIVE PREVIEW</span>
-            <h3>From reading to understanding.</h3>
             <p>
-              Bring your ideas and your reading together. Keep your research
-              question close as you develop each paragraph.
+              Learners now spend several hours each day on social platforms
+              <strong>Dela Cruz &amp; Lim, 2022</strong>, often due to the hours
+              they set aside for studying.
             </p>
             <span className="sample-citation">
-              Trace claims to their sources
+              Dela Cruz &amp; Lim, p4
             </span>
+            <span className="auth-preview-fit">Aligned with your research problem</span>
           </div>
         </section>
         <section className="auth-card">
@@ -59,7 +59,7 @@ export function AuthForm({
           <h2>{title}</h2>
           <p>
             {mode === "login"
-              ? "Sign in to return to your writing."
+              ? "Log in to continue your thesis."
               : mode === "signup"
                 ? "Create your private research workspace."
                 : "We’ll help you securely access your workspace."}
@@ -87,7 +87,7 @@ export function AuthForm({
             <input type="hidden" name="mode" value={mode} />
             {mode !== "update" && (
               <label>
-                Email address
+                Email
                 <input
                   name="email"
                   type="email"
@@ -104,6 +104,7 @@ export function AuthForm({
                 <input
                   name="password"
                   type="password"
+                  placeholder="Your password"
                   required
                   minLength={mode === "login" ? 1 : 12}
                   maxLength={128}
@@ -129,7 +130,7 @@ export function AuthForm({
               {pending
                 ? "Please wait…"
                 : mode === "login"
-                  ? "Sign in"
+                  ? "Log in"
                   : mode === "signup"
                     ? "Create account"
                     : mode === "reset"
@@ -162,7 +163,7 @@ export function AuthForm({
               >
                 {mode === "signup"
                   ? "Already have an account? Sign in"
-                  : "Create an account"}
+                  : "New here? Create an account"}
               </button>
               <button
                 className="text-button"
