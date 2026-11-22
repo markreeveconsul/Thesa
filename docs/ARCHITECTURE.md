@@ -1,70 +1,73 @@
-# Architecture
+# ThesisDesk architecture
+
+## Status
+
+This document separates implemented foundation from planned pipeline. The app uses Next.js App Router, strict TypeScript, Tailwind CSS, Radix Dialog, self-hosted fonts and Supabase SSR. The Tiptap editor, browser-draft ingestion and authenticated source storage are implemented. Otto's local source-question preview uses Gemini embeddings for semantic retrieval and Gemini chat to select validated source quotations. The user has configured Supabase; live auth/storage verification and Vercel deployment remain.
+
+The existing Git history was imported into the previously empty SisAssist workspace. The original thesis-assistant checkout remains unchanged. The legacy Python API routes remain disconnected. The active document_service reuses the bounded Python parser without importing Ollama or vector-store code. See SOURCE_UPLOADS.md for the implemented local storage and request boundaries.
 
 ## Runtime and trust boundaries
 
-The Next.js frontend calls a FastAPI API with an expiring bearer token. Argon2id hashes passwords. SQLAlchemy/SQLite stores identity and ownership; persistent Chroma stores only chunk text, embeddings, and retrieval metadata. Ollama supplies local chat and embedding inference. There are no proprietary AI SDKs or endpoints.
+Browser → Next.js server components/actions → Supabase using the user's authenticated cookie session. getUser verifies the session with Supabase; middleware refreshes cookies. No service-role key is used in user-facing foundation routes. Server actions validate input with Zod and derive owner IDs from the authenticated user.
 
-The API binds to loopback by default. Run one worker: project-level mutation locks serialize upload/deletion, and startup can recover unfinished ingestion records under that assumption. Chroma filtering supplements, but does not replace, SQL ownership authorization.
+Database RLS is the final boundary, including direct browser/API requests. A project ID is only a selector, never authorization. Auth redirects use an exact destination allowlist. Dynamic authenticated pages and middleware responses must not be publicly cached.
 
-## Ingestion
+When public Supabase variables are absent, development mode offers explicitly labeled browser drafts in localStorage; auth forms are disabled. Browser drafts have no account isolation or cloud backup. Production requires Supabase unless ALLOW_BROWSER_DRAFTS=true explicitly enables a demonstration. Adding configuration switches to authenticated storage; browser drafts are not automatically imported. Partially configured credentials should be treated as a configuration error (see config validation).
 
-1. Authorize the caller against the project's owner.
-2. Sanitize the display filename, validate extension/signature, enforce byte limits, and check the SHA-256 duplicate constraint per project.
-3. Extract PDF pages with PyMuPDF; reject encrypted/image-only documents and warn about mixed scans. Extract DOCX body paragraphs/table rows with python-docx, and UTF-8 TXT lines. Apply PDF page, expanded ZIP, extracted text, and chunk limits.
-4. Chunk each locator independently with overlapping generic-token windows. PDF chunks retain physical page numbers; DOCX/TXT retain paragraph/line numbers.
-5. Create a processing source row and save original bytes under generated IDs. Embed in batches of 32 through Ollama and persist Chroma metadata (`project_id`, `file_id`, `filename`, `page`, `locator_type`). Mark ready only after indexing succeeds.
-6. On failure, mark failed and attempt vector/file cleanup. Delete the SQL row only after cleanup succeeds. Otherwise retain it for a retry or explicit deletion. Ready-only evidence selection prevents incomplete sources reaching chat.
+## Implemented data model
 
-The legacy `page` metadata/API field contains the locator number for every format; `locator_type` determines whether it means page, paragraph, or line.
+- profiles: owner is auth.users.id; private preferences.
+- projects: owner, title, research problem, bibliography style, starting structure, revision, timestamps, deletion tombstone.
+- sections: project-owned editor JSON, title/order, parent, revision. Composite parent/project foreign key blocks cross-project hierarchy links.
+- sources: owner-checked upload reservation, immutable storage path, checksum, format, status, extraction warning and deletion tombstone.
+- source_pages: project/source composite FK, one-based location, locator type and extracted text.
+- notes: project-owned rich content.
+- jobs: project-owned status, checkpoint, lease and retries. Browser read-only.
 
-## Retrieval, generation, streaming
+Every application table has ENABLE and FORCE ROW LEVEL SECURITY. Browser grants are explicit. Project owner/tombstone fields and ingestion fields are not client-updatable. Source lifecycle writes use owner-checked SECURITY DEFINER functions; source deletion removes its private object before cascading metadata and extracted locations.
 
-The API resolves project ownership before retrieval. Chroma queries filter by project and, for summaries, file **before** top-k selection. Cosine distance provides a configurable relevance cutoff. Retrieved entries must also correspond to ready SQL source records.
+private.owns_project is SECURITY INVOKER with a fixed empty search path. It requires both the authenticated owner and an active project. Profiles/sections/notes have owner-limited mutations; sources and pages are read-only to direct authenticated table requests. Source RPCs separately validate the active project owner.
 
-The model receives numbered JSON evidence and a system instruction to treat documents as data. It is asked to copy one exact source sentence per line. Complete lines are buffered and structurally validated: missing, malformed, or unknown evidence IDs reject the segment. Each generated sentence must also match a complete sentence in every cited excerpt after whitespace/case normalization; invented paraphrases and phrases stripped from a negation are rejected. Accepted references are replaced inline with server-owned file/locator labels, and SSE token events deliver only accepted segments. An empty result yields the exact abstention text. The final SSE event carries the answer, canonical citation objects, and conversation ID; only successful completions are persisted.
+Private buckets: sources, assets, exports. A source upload requires a reserved source row owned by the user and the exact storage path. No source overwrite policy. Assets and exports are deny-by-default until dedicated metadata/lifecycle policies exist. No public URLs.
 
-Streaming validation checks source text, reference provenance, and citation placement. This extractive MVP cannot prove a quotation answers the question, establish the truth of the original document, or eliminate document prompt injection. This limitation is explicit in the README and should be part of model evaluation.
+## Implemented source ingestion
 
-Ollama exceptions/timeouts and retrieval failures return actionable errors. Output length and generation time are bounded. Both chat and summaries share generation code, avoiding divergent validation behavior. Summaries retrieve aim/method/findings/limitations separately with a bounded combined context, then ask four individual section questions. The server adds section labels and honest abstentions for missing sections.
+Browser files -> loopback FastAPI validation -> time-limited Python parser process -> extracted locations -> (browser draft: atomic IndexedDB save) or (cloud: owner-checked reservation RPC -> private Supabase Storage upload -> completion RPC writes validated locations) -> project-scoped source library and PDF.js/text reader. The upload uses the authenticated browser session and public publishable key; no service-role key is sent to the browser. Apply `202610190001_cloud_sources.sql` to existing Supabase projects before using cloud imports.
 
-## Data model
+The local parser is limited to a development machine's loopback interface. A Vercel deployment cannot reach that parser, so hosted use still needs an authenticated, reachable parsing service.
 
-| Entity | Fields and relationships |
-| --- | --- |
-| User | UUID, unique normalized email, password hash; owns projects |
-| Project | UUID, owner FK, name; owns sources, conversations, notes |
-| SourceFile | UUID, project FK, filename, path, type, SHA-256, status, warning |
-| Conversation | UUID, project FK; owns messages |
-| ChatMessage | UUID, conversation FK, role, content, citation JSON, timestamp |
-| Note | UUID, project FK, title, content, citation JSON |
-| Chroma chunk | Unique ID, text/vector, project/file IDs, locator metadata |
+## Planned indexing and hosted ingestion
 
-SQLite foreign keys are enabled in application and test connections. Project deletion cascades SQL children. File deletion removes its vector records, original bytes, and SQL row. Existing notes/history are retained after individual file deletion and their old citations become unavailable. Project deletion removes those records as well.
+For hosted operation, authorize the user/project → upload to private storage → authenticated parser/worker extracts pages → chunk and embed → store vectors with project/source filters. The current local cloud path stores the original and extracted page text but does not create embeddings or chunks.
 
-Deletion marks files deleting before touching external stores. Failure retains records for retry; operations are not atomically committed across the three stores. Upload/delete operations for the same project are serialized within the one API process.
+The hosted pipeline should use page/extraction checkpoints, stable chunk IDs, idempotent upserts, leases, bounded retries and a scheduled dispatcher. A browser closing or a Vercel invocation timing out must not lose a job. Jobs must check deletion state before committing, preventing source resurrection. Storage and database updates are not one distributed transaction.
 
-## Model changes and persistence
+Plan 25 MB and 300 physical pages initially. Detect corrupt, encrypted, empty, scanned and partially scanned PDFs. Preserve position mappings and distinguish physical page index from printed page label. Multi-page chunk evidence must map to exact supporting pages. Progress reports actual stages/counts, not invented percentages.
 
-URL, chat model, and embedding model come from environment settings. The vector collection carries an embedding-model stamp. A mismatch or unstamped nonempty legacy collection refuses retrieval/indexing until `python -m app.reindex` rebuilds from original uploads. Stop the API before reindexing. Incomplete rebuilds leave unfinished rows failed and can be retried. Embedding-model changes must never mix incompatible vector spaces.
+Version embedding model ID, dimensions and preprocessing. Index one profile at a time; model changes require re-embedding and a deliberate index switch. Planned dimensions: 1024. Add the vector extension, HNSW index and authenticated SQL retrieval function with Milestone 3.
 
-## Frontend
+## Planned assistant (Milestones 4–5)
 
-The workspace loads projects, source status, notes, and persisted history. A shared SSE reader handles chat and summaries and rejects incomplete streams. A private source preview fetches original PDF bytes with authorization, creates a browser blob URL, and navigates to the cited page; blob URLs are revoked when the preview closes. DOCX/TXT locators show authenticated extracted text. No bearer tokens are placed in source URLs.
+The local preview is documented in [AI_SETUP.md](AI_SETUP.md). It embeds page-local chunks with `gemini-embedding-2`, caches up to 5,000 vectors by project/source content in process memory, combines semantic matches with keyword results, and sends up to five passages to `gemini-3.6-flash`. The model writes a conversational answer and selects supporting evidence IDs; the server validates those IDs and streams the answer with original quotations and resolved source locations. The browser checks quotations against its own project sources before displaying them. The four latest messages stay in browser memory for follow-ups and are not persisted; answers and vectors are temporary. This hosted proprietary Gemini trial departs from the original open-source AI requirement and is not ready for sensitive research data or public deployment.
 
-## Tests and layout
+`GEMINI_API_KEY`, `GEMINI_API_BASE_URL`, `AI_CHAT_MODEL`, `AI_EMBED_MODEL`, dimensions and the similarity threshold are backend environment settings. There is no paid-model fallback or automatic retry. Free-tier quotas remain, and citations still need human relevance checks. Hosted account isolation, durable vectors, persistent chat and live-model quality evaluation remain pending.
 
-`backend/tests/` covers parsing, chunking, citation validation, auth/isolation, indexing recovery, deletion, reindexing, and API integration. `test_live_ollama.py` opts into real inference. `frontend/tests/` contains a Playwright test using isolated local servers, synthetic PDFs, and real Ollama. The browser harness uses separate temporary database/upload/index directories and separate Next.js build output.
+Research path: authorize project → persist/rate-limit request → embed query → SQL retrieval under owner/project filters → prompt with untrusted evidence → generate → validate source markers and passage offsets → stream segments → persist canonical citations.
 
-```text
-backend/app/api/routes/     HTTP endpoints
-backend/app/core/           Configuration, hashing, tokens
-backend/app/db/             Engine, sessions, schema initialization/recovery
-backend/app/models/         SQL entities
-backend/app/services/       Extraction, chunking, vector store, RAG, streaming, locks
-backend/app/reindex.py      Explicit offline vector rebuild
-frontend/app/               Workspace and styling
-frontend/components/        Source preview
-frontend/lib/               Typed API, SSE, locator helpers
-frontend/tests/             Browser acceptance and synthetic sources
-docs/                       Architecture and verification notes
-```
+Document text and user draft context cannot issue instructions or tool actions. Model output is never trusted as a file/page locator. Provenance validation cannot prove semantic entailment; evaluations cover relevance, unsupported synthesis, abstention and document prompt injection.
+
+Writing review path: explicitly selected draft text → feedback or proposed diff → user acceptance. Draft is context, not evidence. RRL review covers structure, synthesis and clarity; source checking requires uploaded papers. No unsupported claim of a field-wide research gap.
+
+## Implemented editor and planned deletion
+
+Tiptap provides rich text, tables, HTTPS image links, footnotes, search/replace and a slash menu. Debounced autosave serializes writes and shows Saved only after acknowledgment. Compare-and-swap revisions prevent silent overwrites. PostgreSQL triggers enforce revision increments; SECURITY INVOKER functions create project/templates and reorder chapters atomically under RLS. Browser draft mutations use Web Locks and the same revision checks. Unsaved edits have same-tab sessionStorage recovery and downloadable JSON backups. Navigation flushes pending edits before switching chapters. Images and links are validated; editor JSON has size/depth/node limits.
+
+Citation and suggestion extensions, automatic bibliographies, backup import and DOCX/PDF serializers remain planned. Proposed writing changes will retain their target revision and require acceptance.
+
+Bibliographic metadata is user-confirmed; unknown authors/dates are never invented. Source deletion tombstones access, cancels jobs, removes stored objects/vectors and scrubs citation references in editor/chat/notes. Retain student prose with an explicit removed-citation marker.
+
+## Verification boundaries
+
+PGlite executes these exact SQL migrations against real PostgreSQL RLS, with test-only Supabase auth/storage stubs. This verifies policy predicates, grants and relational integrity. It does not verify GoTrue, email, signed URLs, Storage HTTP, Realtime or hosted pgvector behavior. Those require a connected Supabase environment.
+
+Browser tests exercise real browser drafts and Tiptap: reload persistence, chapter switching/reordering, two-tab conflicts, research problem editing, tables/footnotes, mobile layout and accessibility. Hosted auth acceptance and upload-to-citation E2E remain release gates for later milestones.

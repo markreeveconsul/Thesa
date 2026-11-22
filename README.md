@@ -1,143 +1,122 @@
-# ThesisAssistant
+# Thesa
 
-A local-first thesis workspace built with Next.js, FastAPI, SQLite, persistent Chroma, and open-weight models served by Ollama. No proprietary inference API is used.
+A thesis-writing workspace built with Next.js, Tiptap and Supabase, with a local-preview Gemini source assistant. The current design adapts the approved Thesa UI source: emerald accents, rounded controls, Manrope interface text, a serif manuscript, Otto illustrations, and chapters/sources beside the editor.
 
-Create an account and project, upload PDF/DOCX/TXT sources, ask questions, open cited source locations, generate document summaries, and save answers as notes.
+## What works now
 
-## Setup (Windows PowerShell)
+- Thesis dashboard, working title, editable research problem, APA/MLA/IEEE preference.
+- Five-chapter template or blank outline.
+- Real Tiptap editing: headings, bold/italic/underline, lists, block quotes, tables, HTTPS image links with alt text, footnotes, undo/redo, find/replace, word count and a small slash-tool menu.
+- Chapter creation, renaming, switching, drag ordering and keyboard-accessible reorder controls.
+- Debounced serialized autosave with visible states, revision conflicts, tab recovery and JSON chapter backup downloads.
+- Focus mode, floating/docked Otto panel, command palette, mobile reading/editing, light/dark themes. Ctrl/⌘ K toggles Otto; Ctrl/⌘ Shift K opens commands. Escape closes Otto or exits focus mode.
+- Supabase auth routes, user-isolated schema and private storage policies. The existing project needs the latest source-ingestion migration before cloud imports work.
 
-Prerequisites: Python 3.11+, Node.js 20.9+, and Ollama. Install Ollama from https://ollama.com/download/windows, then open a new terminal:
+**Source uploads and reading work for browser drafts and signed-in cloud projects.** PDF/DOCX/TXT files are parsed by the local Python/FastAPI service. Browser drafts save in IndexedDB; signed-in sources save in the private Supabase bucket with owner-checked database functions. The reader supports original PDF rendering, page navigation, zoom, text search and original-file download. See [source setup and limits](docs/SOURCE_UPLOADS.md).
 
-```powershell
-ollama pull qwen2.5:3b
-ollama pull nomic-embed-text
-ollama list
-```
+**Otto source chat is a local preview.** After [AI setup](docs/AI_SETUP.md), Otto uses semantic plus keyword search over the selected project's sources, then Gemini writes a conversational answer grounded in retrieved passages. Follow-up questions use a short in-memory chat context, and each answer shows the original quotation with a clickable file/page location. Unsupported questions abstain; provider errors stay explicit. Chat is not saved, and citation insertion, notes and DOCX/PDF export remain pending.
 
-The default chat model is modest enough to try on a 16 GB machine. CPU generation can be slow. Model licenses differ: review the license for whichever open-weight model you configure.
+This Gemini trial uses a hosted proprietary model and does not meet the original open-source AI requirement. Free-tier quotas still apply, and Google may use free-tier prompts to improve its products; use synthetic or non-sensitive material while evaluating it.
 
-From the repository root:
+## Run locally
 
-```powershell
-Copy-Item .env.example .env
-cd backend
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[test]"
-.\.venv\Scripts\python.exe -c "import secrets; print(secrets.token_hex(32))"
-```
+**Windows shortcut:** after the one-time dependency setup in [SOURCE_UPLOADS.md](docs/SOURCE_UPLOADS.md), double-click **Start Thesa.bat** in the repository root. It starts the frontend and document parser, then opens `http://127.0.0.1:3002`. No terminal commands are needed for subsequent runs. Keep its status window open; press Enter there to stop the services it started. Existing compatible services are reused and left running. Diagnostic logs are in ignored `.thesa-run/`. The older `Start Thesa.cmd` also remains compatible.
 
-Put the generated value in `SECRET_KEY` in the root `.env`. Do not commit `.env`. Keep `APP_ENV=development` for this local setup; non-development environments reject known placeholder or short secrets.
+Browser drafts are tied to the exact address: `localhost`, `127.0.0.1` and different ports have separate storage. The launcher consistently uses `127.0.0.1:3002`; it does not move drafts from another address.
 
-Start the backend from `backend/`:
+Requires Node.js 22+ and npm. The editor alone needs no Python, Ollama or Docker. Source upload/parsing additionally requires the FastAPI service described in [SOURCE_UPLOADS.md](docs/SOURCE_UPLOADS.md).
 
-```powershell
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-```
-
-In another terminal, from `frontend/`:
-
-```powershell
+~~~powershell
+cd frontend
 npm ci
-npm run dev
-```
+Copy-Item .env.example .env.local
+npm run dev -- --port 3001
+~~~
 
-Open http://localhost:3000. The API health endpoint is http://localhost:8000/health and API documentation is http://localhost:8000/docs. Health confirms the API is alive, not that Ollama models are loaded.
+Open http://localhost:3001. With both Supabase variables empty, development mode uses **browser drafts**. Create a thesis and write immediately. Drafts persist in that browser's localStorage; they are not a user account, cloud backup or cross-device sync. Clearing browser data removes them. Download important chapter backups. Safe local writes require Web Locks (supported in current mainstream browsers).
 
-On macOS/Linux use `python3 -m venv .venv`, `.venv/bin/python`, and `cp` instead of the PowerShell equivalents. Ollama must be running (`ollama serve` if it is not already running as an application/service).
+Unsaved text is also kept in sessionStorage for same-tab recovery. The editor offers restoration after reload; if the saved revision changed, download the recovered text for comparison instead of silently replacing newer work. Backups are JSON data, not finished DOCX/PDF exports; a backup-import interface is not implemented yet.
 
-## Configuration
+A production build without Supabase fails closed by default. Set ALLOW_BROWSER_DRAFTS=true only for an intentional demonstration environment, never as an alternative to authenticated production storage.
 
-Backend configuration loads the root `.env`. Relative storage paths resolve against `backend/`. Set browser configuration in `frontend/.env.local` when needed; the frontend does not read the root `.env`.
+## Connect Supabase
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `APP_ENV` | `development` | Local development mode |
-| `SECRET_KEY` | development placeholder | Replace with a random signing secret |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `60` | Token lifetime |
-| `DATABASE_URL` | `sqlite:///./data/thesis_assistant.db` | Application database |
-| `UPLOAD_DIR` | `./uploads` | Original sources |
-| `CHROMA_DIR` | `./chroma` | Persistent vector index |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama inference endpoint |
-| `OLLAMA_CHAT_MODEL` | `qwen2.5:3b` | Open-weight chat model |
-| `OLLAMA_EMBED_MODEL` | `nomic-embed-text` | Embedding model |
-| `OLLAMA_TIMEOUT_SECONDS` | `120` | Model request/response deadline |
-| `MAX_UPLOAD_MB` | `25` | Per-file byte limit |
-| `MAX_PDF_PAGES` | `1000` | PDF page limit |
-| `MAX_EXTRACTED_CHARS` | `2000000` | Extracted text limit |
-| `MAX_DOCX_EXPANDED_MB` | `100` | Expanded DOCX archive limit |
-| `MAX_CHUNKS` | `10000` | Per-source chunk limit |
-| `CHUNK_SIZE_TOKENS` / `CHUNK_OVERLAP_TOKENS` | `700` / `100` | Approximate token windows |
-| `RETRIEVAL_TOP_K` | `5` | Retrieval limit per query |
-| `MIN_RELEVANCE_DISTANCE` | `0.75` | Maximum accepted cosine distance; lower is stricter |
-| `CORS_ORIGINS` | `http://localhost:3000` | Allowed browser origins, comma-separated |
-| `NEXT_PUBLIC_API_URL` | `http://localhost:8000` | Frontend-only API URL |
+Follow [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md) to create or select the hosted project, set local Auth redirects, link the CLI and apply the migrations. The Supabase CLI is pinned in `frontend/package.json` so teammates use the same version.
 
-Changing the chat model only requires pulling it, updating configuration, and restarting. Changing the embedding model requires rebuilding existing vectors:
+At a high level:
 
-```powershell
-# Stop the backend first, update .env, pull the new embedding model, then:
-cd backend
-.\.venv\Scripts\python.exe -m app.reindex
-```
+1. Create a Supabase project and copy its project URL and **publishable** key into `frontend/.env.local`.
+2. From the repository root, authenticate/link the CLI and apply migrations:
+   ~~~sh
+   .\frontend\node_modules\.bin\supabase.cmd login
+   .\frontend\node_modules\.bin\supabase.cmd link --project-ref YOUR_PROJECT_REF
+   .\frontend\node_modules\.bin\supabase.cmd db push
+   ~~~
+   This applies all four migrations, including private source storage and the editor revision functions. Existing browser drafts are not migrated automatically.
+3. Configure the Auth redirect allow-list and email confirmation in the Supabase dashboard, then restart Next.js.
+4. Verify signup, confirmation, login, recovery, two-user isolation and cloud autosave against the hosted project before release.
 
-This rebuilds the entire local index from the original uploads, including all users' documents. It preserves source IDs, notes, and history. An interrupted rebuild leaves unfinished files unavailable; fix the failure and rerun the command. Existing indexes without an embedding-model stamp also require this rebuild. Keep a backup of the database, uploads, and Chroma directory before maintenance.
+User-facing routes never use a service-role key. RLS and owner-checked source RPCs protect cloud files and extracted text. The local FastAPI parser is for local development; a hosted deployment still needs an authenticated, reachable parser service.
 
-## Source locators and grounding
+## Deploy to Vercel
 
-PDF citations use physical one-based PDF pages. DOCX citations use extracted paragraph numbers, counting table rows as paragraphs. TXT citations use original line numbers. The UI labels these honestly; DOCX/TXT are not presented as physically paginated documents.
+Choose frontend as the root directory, Next.js framework, npm ci and npm run build. Configure the public Supabase variables and deployed site origin in the appropriate environment. Use a separate Supabase project for destructive preview testing.
 
-A citation opens the authenticated original PDF at its page, with extracted text available below. DOCX/TXT citations open the corresponding extracted paragraph or line. Deleted sources show an unavailable-source error. Historical answers and notes remain after deleting an individual source; deleting a project removes its history and notes too.
+No Vercel deployment has been performed. Local database-policy tests do not establish that hosted auth/email/storage HTTP APIs work.
 
-Document text is untrusted input. The prompt separates it from instructions. The server buffers complete answer lines, rejects missing/malformed/out-of-range citations, and requires each answer sentence to match a complete sentence in every cited excerpt (normalizing whitespace and case). It replaces accepted IDs with canonical file/locator metadata before streaming. Answers and section summaries are extractive quotations, not free paraphrases; unsupported text is discarded. An answer with no accepted evidence returns exactly `I can't find this in your documents.`
+## Environment
 
-**Grounding is extractive, not semantic proof.** The model selects source sentences; the server verifies their presence and locators. A selected quotation can still be irrelevant, misleading in context, or factually wrong in the original document. Check the source page for consequential claims. Document text remains untrusted.
+See frontend/.env.example (copy to frontend/.env.local; Next.js does not read the repository-root .env).
+
+| Variables | Purpose |
+| --- | --- |
+| NEXT_PUBLIC_SITE_URL | Canonical site origin for auth emails |
+| NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY | Hosted database/auth configuration |
+| ALLOW_BROWSER_DRAFTS | Explicit opt-in for unauthenticated browser drafts in a production demonstration build; false by default |
+| SUPABASE_SERVICE_ROLE_KEY | Future worker credential, server-only; unused in current user routes |
+| GEMINI_API_KEY / GEMINI_API_BASE_URL | Backend-only Gemini API key and API base URL |
+| AI_CHAT_MODEL / AI_EMBED_MODEL | Swap chat and embedding model IDs without code changes |
+| AI_EMBED_DIMENSIONS / AI_RETRIEVAL_MIN_SCORE | Embedding vector size and semantic match threshold |
+| MAX_UPLOAD_MB / MAX_PDF_PAGES | Planned ingestion caps: 25 MB / 300 pages |
+
+The active Python AI adapter reads the Gemini settings from **backend/.env**. Never put the key in frontend variables or commit it. See [AI_SETUP.md](docs/AI_SETUP.md) for setup, privacy and quota details.
 
 ## Tests
 
-Fast deterministic tests, using isolated SQLite/Chroma storage and mocked inference:
+From frontend:
 
-```powershell
-cd backend
-.\.venv\Scripts\python.exe -m pytest -q
-```
-
-Live Ollama acceptance test (three PDFs, correct cited page, and an unanswerable question):
-
-```powershell
-$env:RUN_OLLAMA_TESTS='1'
-.\.venv\Scripts\python.exe -m pytest tests/test_live_ollama.py -q
-Remove-Item Env:RUN_OLLAMA_TESTS
-```
-
-Frontend checks:
-
-```powershell
-cd frontend
-npm run lint
+~~~sh
+npm test
+npm run typecheck
 npm run build
-npm audit
-```
+npm run test:e2e
+~~~
 
-`lint` currently runs the TypeScript checker, not ESLint.
+Run build and browser tests sequentially because Next.js updates shared generated type files.
 
-Browser acceptance test, with Ollama running and both models pulled:
+Vitest executes the actual migrations in PGlite and tests authentication-role isolation, column grants, storage policies, atomic project/template creation, revision conflicts and all-or-nothing chapter reordering. Supabase-managed auth/storage plumbing is substituted; its HTTP APIs are not exercised.
 
-```powershell
-cd frontend
-npx playwright test
-```
+Other unit tests cover document validation, word count, search across formatting boundaries and serialized autosave, including edits made during in-flight saves and failures.
 
-This launches disposable servers on ports 8011 and 3011 with temporary database/upload/index paths. It signs up, uploads three synthetic PDFs, asks questions, opens the cited PDF page, saves a note, reloads history, and deletes source/project data. Edge is the default test browser on Windows. For Chromium use `npx playwright install chromium`, set `PLAYWRIGHT_CHANNEL=chromium`, and rerun. Set `TEST_PYTHON` if the backend virtual environment is elsewhere. The live API test is opt-in in the ordinary pytest suite; browser tests always require real Ollama.
+Playwright uses an isolated development server on port 3012, real browser storage and a real Tiptap editor. It tests persistence, multiple-tab conflicts, chapter switching/reordering, research-problem changes, formatting, tables/footnotes, mobile layouts and axe accessibility checks. Windows defaults to Edge; elsewhere install Chromium and set PLAYWRIGHT_CHANNEL=chromium.
+
+## Repository
+
+- frontend/: active application and tests.
+- supabase/migrations/: SQL schema, grants, RLS and editor functions.
+- docs/ARCHITECTURE.md and docs/DESIGN.md: decisions and implementation boundaries.
+- backend/document_service/: active local FastAPI parser, with bounded extraction reused from backend/app/services/parsing.py. Other backend/app routes remain legacy and are not connected to this UI.
+
+The original C:\Users\Admin\thesis-assistant checkout is unchanged. Work is in the SisAssist repository on codex/thesisdesk.
 
 ## Known limitations and next steps
 
-- Run **one API worker**. Project mutation locks and startup recovery assume a single process. This is an MVP for local use, not a hardened multi-worker deployment.
-- Indexing happens within the upload request. The UI shows progress by file; large files may take minutes. PDF text/ZIP expansion limits do not replace deployment-level request-body/time limits.
-- OCR is out of scope. Image-only PDFs are rejected; mixed scanned/text PDFs warn about unreadable pages. Password-protected PDFs are rejected.
-- DOCX body paragraphs and top-level table rows are extracted. Headers, footnotes, images, and nested-table structure are not fully represented.
-- Chunk token counts use a generic tokenizer, so they approximate the selected model's tokens. Retrieval thresholds need calibration for real thesis collections.
-- Summaries use bounded retrieval and four separate section questions; they are not an exhaustive reading of every page. Unsupported summary sections are labelled unavailable.
-- Each chat question is answered independently from retrieved evidence. History is saved and displayed, but prior turns are not used to interpret ambiguous follow-up questions.
-- Bearer tokens live in browser local storage and expire. Local storage/database files are unencrypted. Before remote deployment, revisit session handling, HTTPS, rate limits, schema migrations, and request limits.
-- If the API crashes during indexing, startup marks interrupted uploads failed so they can be retried or deleted. Deletion across SQLite, files, and Chroma is retryable, not a single atomic transaction.
-- No citation export, paper discovery, or writing feedback is implemented. Those remain outside the approved MVP.
+- Live Supabase/Vercel verification remains pending.
+- No private image upload yet; explicit HTTPS image links load from external hosts.
+- Footnotes currently use linked dagger markers and an end-of-chapter list. Final export/pagination is not implemented.
+- Browser backups are per chapter; bulk import/export and cloud draft migration are not implemented.
+- Large-document performance and full assistive-technology review remain final-MVP checks.
+- Browser drafts store sources in IndexedDB; signed-in cloud projects store originals privately in Supabase. Both currently use the local loopback parser; hosted parsing and durable background ingestion remain pending.
+- Then: grounded assistant, selected-text/RRL review, accepted suggestions, bibliography, notes and exports.
+
+No OCR, collaboration, sharing, paper discovery, plagiarism checks or unverifiable alignment/AI-detection percentages are included.
