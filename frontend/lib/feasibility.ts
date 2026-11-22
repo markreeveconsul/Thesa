@@ -50,7 +50,7 @@ export const feasibilityReportSchema = z.object({
   next_steps: z.array(z.object({
     action: z.string().max(700),
     reason: z.string().max(700),
-    citations: z.array(citationSchema).max(3).optional(),
+    citations: z.array(citationSchema).max(3).optional().default([]),
   })).max(8),
   scope_adjustments: z.array(z.string().max(700)).max(5),
   missing_information: z.array(z.string().max(700)).max(12),
@@ -64,36 +64,46 @@ export type FeasibilityAssessment = {
 };
 
 export function buildFeasibilityMarkdown(assessment: FeasibilityAssessment): string {
+  const { report, inputs, created_at } = assessment;
   const lines = [
-    `# Feasibility review: ${assessment.inputs.topic}`,
+    `# Feasibility Review: ${inputs.topic}`,
     "",
-    `Saved: ${new Date(assessment.created_at).toLocaleString()}`,
+    `Created: ${new Date(created_at).toLocaleString()}`,
     "",
     "## Summary",
-    assessment.report.summary,
+    report.summary,
     "",
-    "## Dimension assessments",
+    "## Dimensions",
   ];
-  for (const [label, item] of Object.entries(assessment.report.dimensions)) {
-    lines.push(`### ${label.replace(/_/g, " ")}`, `**${item.status}**`, item.assessment);
-    if (item.known) lines.push(`Known: ${item.known}`);
-    if (item.unknown) lines.push(`Uncertain: ${item.unknown}`);
+  for (const [name, item] of Object.entries(report.dimensions)) {
+    lines.push(`### ${name.replaceAll("_", " ")}`, `**Status:** ${item.status}`, item.assessment);
+    if (item.known) lines.push(`- **Known:** ${item.known}`);
+    if (item.unknown) lines.push(`- **Uncertain:** ${item.unknown}`);
+    for (const citation of item.citations) {
+      lines.push(`- Source: ${citation.filename} (${citation.locator_type} ${citation.location}) — "${citation.text}"`);
+    }
   }
-  if (assessment.report.risks.length) {
-    lines.push("", "## Risks to work through");
-    for (const risk of assessment.report.risks)
-      lines.push(`- **${risk.title}:** ${risk.why_it_matters} ${risk.mitigation}`);
+  if (report.risks.length) {
+    lines.push("", "## Risks");
+    for (const risk of report.risks) {
+      lines.push(`### ${risk.title}`, risk.why_it_matters, `**Possible response:** ${risk.mitigation}`);
+      for (const citation of risk.citations) {
+        lines.push(`- Source: ${citation.filename} (${citation.locator_type} ${citation.location}) — "${citation.text}"`);
+      }
+    }
   }
-  if (assessment.report.next_steps.length) {
+  if (report.next_steps.length) {
     lines.push("", "## Suggested next steps");
-    for (const step of assessment.report.next_steps)
-      lines.push(`- ${step.action} — ${step.reason}`);
+    for (const step of report.next_steps) {
+      lines.push(`- **${step.action}:** ${step.reason}`);
+      for (const citation of step.citations ?? []) {
+        lines.push(`  - Source: ${citation.filename} (${citation.locator_type} ${citation.location}) — "${citation.text}"`);
+      }
+    }
   }
-  if (assessment.report.scope_adjustments.length)
-    lines.push("", "## Possible scope adjustments", ...assessment.report.scope_adjustments.map((item) => `- ${item}`));
-  if (assessment.report.missing_information.length)
-    lines.push("", "## Still to clarify", ...assessment.report.missing_information.map((item) => `- ${item}`));
-  return lines.join("\n");
+  if (report.scope_adjustments.length) lines.push("", "## Scope adjustments", ...report.scope_adjustments.map((item) => `- ${item}`));
+  if (report.missing_information.length) lines.push("", "## Still to clarify", ...report.missing_information.map((item) => `- ${item}`));
+  return `${lines.join("\n")}\n`;
 }
 
 export async function askFeasibilityFollowUp(
@@ -119,8 +129,8 @@ export async function askFeasibilityFollowUp(
     const body = await response.json().catch(() => null);
     throw new Error(typeof body?.detail === "string" ? body.detail : "Could not answer the follow-up.");
   }
-  const body = await response.json();
-  if (typeof body.answer !== "string") throw new Error("Otto returned an invalid follow-up answer.");
+  const body = await response.json() as { answer?: string };
+  if (typeof body.answer !== "string" || !body.answer.trim()) throw new Error("Otto returned an empty follow-up answer.");
   return body.answer;
 }
 

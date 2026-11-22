@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runFeasibility, type FeasibilityInputs } from "@/lib/feasibility";
+import {
+  askFeasibilityFollowUp,
+  buildFeasibilityMarkdown,
+  runFeasibility,
+  type FeasibilityAssessment,
+  type FeasibilityInputs,
+} from "@/lib/feasibility";
 
 const inputs: FeasibilityInputs = {
   topic: "Air quality and student attendance",
@@ -53,5 +59,39 @@ describe("feasibility client contract", () => {
     };
     await expect(runFeasibility("project-1", inputs, [source], new AbortController().signal))
       .rejects.toThrow(/invalid source citation/i);
+  });
+
+  it("exports a markdown report with evidence", () => {
+    const assessment = {
+      id: "review-1",
+      created_at: "2026-11-22T00:00:00.000Z",
+      inputs,
+      report: report([{
+        id: "E1",
+        source_id: "source-1",
+        filename: "study.txt",
+        location: 3,
+        locator_type: "page",
+        text: "The study used interviews.",
+      }]),
+    } as unknown as FeasibilityAssessment;
+    const markdown = buildFeasibilityMarkdown(assessment);
+    expect(markdown).toContain("# Feasibility Review:");
+    expect(markdown).toContain("study.txt");
+    expect(markdown).toContain("The study used interviews.");
+  });
+
+  it("posts dimension-specific follow-up questions", async () => {
+    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ answer: "Shorten the participant window." }), { status: 200 }));
+    vi.stubGlobal("fetch", fetcher);
+    const assessment = {
+      id: "review-1",
+      created_at: "2026-11-22T00:00:00.000Z",
+      inputs,
+      report: report(),
+    } as unknown as FeasibilityAssessment;
+    await expect(askFeasibilityFollowUp("timeline", "What should I change?", assessment, [], new AbortController().signal))
+      .resolves.toBe("Shorten the participant window.");
+    expect(fetcher.mock.calls[0][0]).toContain("/feasibility/follow-up");
   });
 });

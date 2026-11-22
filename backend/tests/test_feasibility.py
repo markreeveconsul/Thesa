@@ -14,18 +14,26 @@ def response(status_code: int, report: dict | None = None) -> httpx.Response:
 
 
 def valid_report() -> dict:
+    citation = {
+        "id": "E1",
+        "source_id": "source-1",
+        "filename": "study.txt",
+        "location": 1,
+        "locator_type": "page",
+        "text": "Evidence excerpt.",
+    }
     return {
         "summary": "Workable",
         "dimensions": {
-            "scope": {"status": "Looks workable", "reason": "Clear"},
-            "method_fit": {"status": "Looks workable", "reason": "Clear"},
-            "access": {"status": "Needs planning", "reason": "Needs access"},
-            "timeline": {"status": "Looks workable", "reason": "Clear"},
-            "resources": {"status": "Needs clarification", "reason": "Budget unclear"},
-            "ethics": {"status": "Looks workable", "reason": "Clear"},
+            "scope": {"status": "Looks workable", "assessment": "Clear", "known": "Clear", "unknown": "", "citations": [citation]},
+            "method_fit": {"status": "Looks workable", "assessment": "Clear", "known": "Clear", "unknown": "", "citations": []},
+            "access": {"status": "Needs planning", "assessment": "Needs access", "known": "", "unknown": "Access unclear", "citations": []},
+            "timeline": {"status": "Looks workable", "assessment": "Clear", "known": "Clear", "unknown": "", "citations": []},
+            "resources": {"status": "Needs clarification", "assessment": "Budget unclear", "known": "", "unknown": "Budget", "citations": []},
+            "ethics": {"status": "Looks workable", "assessment": "Clear", "known": "Clear", "unknown": "", "citations": []},
         },
-        "risks": ["Risk"],
-        "next_steps": ["Step"],
+        "risks": [{"title": "Risk", "why_it_matters": "It matters", "mitigation": "Mitigate", "citations": [citation]}],
+        "next_steps": [{"action": "Step", "reason": "It is actionable", "citations": [citation]}],
         "scope_adjustments": [],
         "missing_information": [],
     }
@@ -101,3 +109,29 @@ def test_auth_error_is_not_retried(mock_request: Mock) -> None:
         feasibility.check_feasibility("Plan", "Evidence")
 
     assert mock_request.call_count == 1
+
+
+@patch.dict(
+    "os.environ",
+    {
+        "FEASIBILITY_GROQ_API_KEY": "test-key",
+        "FEASIBILITY_GROQ_MODEL": "openai/gpt-oss-120b",
+    },
+)
+@patch("app.services.feasibility._groq_request")
+def test_follow_up_uses_fallback_and_returns_answer(mock_request: Mock) -> None:
+    mock_request.side_effect = [
+        response(429),
+        response(200, {"answer": "Add milestones to the timeline."}),
+    ]
+
+    answer = feasibility.check_follow_up(
+        "timeline",
+        "Why is timeline Needs planning?",
+        {"timeline": "Two months"},
+        valid_report(),
+        [],
+    )
+
+    assert answer == "Add milestones to the timeline."
+    assert mock_request.call_args_list[1].args[1] == "qwen/qwen3.8-27b"
