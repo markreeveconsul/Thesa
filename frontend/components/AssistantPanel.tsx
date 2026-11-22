@@ -18,6 +18,7 @@ export function AssistantPanel({
   onOpenChange,
   onDockChange,
   onSources,
+  onFeasibility,
   onUnavailable,
   projectId,
   local,
@@ -28,6 +29,7 @@ export function AssistantPanel({
   onOpenChange: (open: boolean) => void;
   onDockChange: (docked: boolean) => void;
   onSources: () => void;
+  onFeasibility: () => void;
   onUnavailable: (feature: string) => void;
   projectId: string;
   local: boolean;
@@ -256,6 +258,7 @@ export function AssistantPanel({
           </div>
           <footer className="otto-footer">
             <div className="otto-prompts">
+              <button onClick={onFeasibility}>Check feasibility</button>
               {["Summarize", "Review RRL"].map((label) => (
                 <button key={label} onClick={() => onUnavailable(label)}>
                   {label}

@@ -38,6 +38,7 @@ import { ThemeButton } from "./ThemeButton";
 import { Otto } from "./Otto";
 import { EvidenceReader } from "./EvidenceReader";
 import { listSources, watchSources, type SourceInfo } from "@/lib/sources";
+import { FeasibilityWorkspace } from "./FeasibilityWorkspace";
 
 export function Workspace({
   local,
@@ -60,7 +61,7 @@ export function Workspace({
     [left, setLeft] = useState(true),
     [right, setRight] = useState(false),
     [docked, setDocked] = useState(false);
-  const [view, setView] = useState<"editor" | "sources" | "reader">("editor"),
+  const [view, setView] = useState<"editor" | "sources" | "reader" | "feasibility">("editor"),
     [busy, setBusy] = useState(false),
     [saveLabel, setSaveLabel] = useState(
       local ? "Browser draft" : "Cloud workspace",
@@ -238,6 +239,9 @@ export function Workspace({
   const showSources = async () => {
     if (await flush()) setView("sources");
   };
+  const showFeasibility = async () => {
+    if (await flush()) setView("feasibility");
+  };
   const commands = [
     {
       label: "Back to my theses",
@@ -354,7 +358,23 @@ export function Workspace({
           )}
         </div>
       </header>
-      {view === "reader" ? (
+      {view === "feasibility" ? (
+        <FeasibilityWorkspace
+          projectId={projectId}
+          projectTitle={project.title}
+          researchProblem={project.research_problem ?? ""}
+          sources={sources}
+          local={local}
+          onBack={() => setView("editor")}
+          onCitation={async (citation) => {
+            if (await flush()) {
+              setSourceId(citation.source_id);
+              setSourceLocation(citation.location);
+              setView("reader");
+            }
+          }}
+        />
+      ) : view === "reader" ? (
         <EvidenceReader
           section={active}
           projectId={projectId}
@@ -395,6 +415,7 @@ export function Workspace({
               onAdd={(title) => void add(title)}
               onReorder={(items) => void reorder(items)}
               onSources={() => void showSources()}
+              onFeasibility={() => void showFeasibility()}
               busy={busy}
             />
           )}
@@ -491,6 +512,7 @@ export function Workspace({
           onOpenChange={setRight}
           onDockChange={setDocked}
           onSources={() => void showSources()}
+          onFeasibility={() => void showFeasibility()}
           onUnavailable={unavailable}
         />
       </div>
