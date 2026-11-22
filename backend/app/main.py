@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, chat, files, notes, projects, summaries
+from app.api.routes import auth, chat, feasibility, files, notes, projects, summaries
 from app.core.config import settings
 from app.db.session import init_db
 
@@ -35,6 +35,7 @@ app.include_router(files.router, prefix=f"{settings.api_v1_prefix}/projects", ta
 app.include_router(chat.router, prefix=f"{settings.api_v1_prefix}/projects", tags=["chat"])
 app.include_router(summaries.router, prefix=f"{settings.api_v1_prefix}/projects", tags=["summaries"])
 app.include_router(notes.router, prefix=f"{settings.api_v1_prefix}/projects", tags=["notes"])
+app.include_router(feasibility.router, prefix=f"{settings.api_v1_prefix}", tags=["feasibility"])
 
 
 @app.get("/health", tags=["health"])

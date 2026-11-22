@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     min_relevance_distance: float = 0.75
     ollama_timeout_seconds: int = 120
     cors_origins: str = "http://localhost:3000"
+    feasibility_groq_api_key: str = ""
+    feasibility_groq_model: str = "openai/gpt-oss-120b"
+    feasibility_groq_base_url: str = "https://api.groq.com/openai/v1"
 
     @field_validator("secret_key")
     @classmethod
