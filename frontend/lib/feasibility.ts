@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SourceContent } from "./sources";
+import type { Citation } from "./chat";
 
 export const feasibilityInputsSchema = z.object({
   topic: z.string().trim().min(1, "Enter a topic or working title.").max(300),
@@ -46,7 +47,11 @@ export const feasibilityReportSchema = z.object({
     mitigation: z.string().max(700),
     citations: z.array(citationSchema).max(3),
   })).max(8),
-  next_steps: z.array(z.object({ action: z.string().max(700), reason: z.string().max(700) })).max(8),
+  next_steps: z.array(z.object({
+    action: z.string().max(700),
+    reason: z.string().max(700),
+    citations: z.array(citationSchema).max(3).optional(),
+  })).max(8),
   scope_adjustments: z.array(z.string().max(700)).max(5),
   missing_information: z.array(z.string().max(700)).max(12),
 });
@@ -57,6 +62,67 @@ export type FeasibilityAssessment = {
   inputs: FeasibilityInputs;
   report: FeasibilityReport;
 };
+
+export function buildFeasibilityMarkdown(assessment: FeasibilityAssessment): string {
+  const lines = [
+    `# Feasibility review: ${assessment.inputs.topic}`,
+    "",
+    `Saved: ${new Date(assessment.created_at).toLocaleString()}`,
+    "",
+    "## Summary",
+    assessment.report.summary,
+    "",
+    "## Dimension assessments",
+  ];
+  for (const [label, item] of Object.entries(assessment.report.dimensions)) {
+    lines.push(`### ${label.replace(/_/g, " ")}`, `**${item.status}**`, item.assessment);
+    if (item.known) lines.push(`Known: ${item.known}`);
+    if (item.unknown) lines.push(`Uncertain: ${item.unknown}`);
+  }
+  if (assessment.report.risks.length) {
+    lines.push("", "## Risks to work through");
+    for (const risk of assessment.report.risks)
+      lines.push(`- **${risk.title}:** ${risk.why_it_matters} ${risk.mitigation}`);
+  }
+  if (assessment.report.next_steps.length) {
+    lines.push("", "## Suggested next steps");
+    for (const step of assessment.report.next_steps)
+      lines.push(`- ${step.action} — ${step.reason}`);
+  }
+  if (assessment.report.scope_adjustments.length)
+    lines.push("", "## Possible scope adjustments", ...assessment.report.scope_adjustments.map((item) => `- ${item}`));
+  if (assessment.report.missing_information.length)
+    lines.push("", "## Still to clarify", ...assessment.report.missing_information.map((item) => `- ${item}`));
+  return lines.join("\n");
+}
+
+export async function askFeasibilityFollowUp(
+  dimension: string,
+  question: string,
+  assessment: FeasibilityAssessment,
+  evidence: Citation[],
+  signal: AbortSignal,
+): Promise<string> {
+  const base = process.env.NEXT_PUBLIC_DOCUMENT_API_URL || "http://127.0.0.1:8000";
+  const response = await fetch(`${base.replace(/\/$/, "")}/feasibility/follow-up`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    signal: AbortSignal.any([signal, AbortSignal.timeout(55000)]),
+    body: JSON.stringify({
+      dimension,
+      question,
+      assessment,
+      evidence,
+    }),
+  });
+  if (!response.ok) {
+    const body = await response.json().catch(() => null);
+    throw new Error(typeof body?.detail === "string" ? body.detail : "Could not answer the follow-up.");
+  }
+  const body = await response.json();
+  if (typeof body.answer !== "string") throw new Error("Otto returned an invalid follow-up answer.");
+  return body.answer;
+}
 
 function terms(text: string) {
   return new Set(text.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []);
