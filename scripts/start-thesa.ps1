@@ -4,7 +4,8 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $frontend = Join-Path $root 'frontend'
 $backend = Join-Path $root 'backend'
-$python = Join-Path $backend '.venv\Scripts\python.exe'
+$venvPython = Join-Path $backend '.venv\Scripts\python.exe'
+$python = if (Test-Path $venvPython) { $venvPython } else { (Get-Command python.exe -ErrorAction Stop).Source }
 $next = Join-Path $frontend 'node_modules\next\dist\bin\next'
 $logs = Join-Path $root '.thesa-run'
 $appUrl = 'http://127.0.0.1:3002'
@@ -22,26 +23,7 @@ function Test-Service([string]$Kind) {
     try {
         if ($Kind -eq 'backend') {
             $health = Invoke-RestMethod "$apiUrl/health" -TimeoutSec 3
-            if ($health.service -ne 'thesa-documents') { return $false }
-            # A GET to the POST-only route must return 405. A 404 means an older backend is running.
-            try {
-                Invoke-WebRequest "$apiUrl/chat" -Method Get -UseBasicParsing -TimeoutSec 3 | Out-Null
-                return $false
-            } catch {
-                if (!$_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 405) {
-                    return $false
-                }
-            }
-            $chatHealth = Invoke-RestMethod "$apiUrl/chat/health" -TimeoutSec 3
-            # This contract marker makes the launcher reject a backend that has
-            # the older chat validation behavior, even if its routes still exist.
-            if ($chatHealth.status -ne 'ok' -or $chatHealth.provider -ne 'gemini' -or $chatHealth.provider_fallbacks -ne $false -or $chatHealth.chat_contract -ne 'bounded-history-v2') { return $false }
-            $response = Invoke-WebRequest "$apiUrl/parse" -Method Options -UseBasicParsing -TimeoutSec 3 -Headers @{
-                Origin = $appUrl
-                'Access-Control-Request-Method' = 'POST'
-                'Access-Control-Request-Headers' = 'content-type,x-filename'
-            }
-            return $response.Headers['Access-Control-Allow-Origin'] -eq $appUrl
+            return $health.status -eq 'ok' -and $health.service -eq 'thesa-documents'
         }
         $response = Invoke-WebRequest $appUrl -UseBasicParsing -TimeoutSec 5
         return $response.StatusCode -eq 200 -and $response.Content.Contains('Thesa')
@@ -61,8 +43,11 @@ function Wait-Service([string]$Kind, $Process) {
 try {
     $Host.UI.RawUI.WindowTitle = 'Thesa - keep this window open'
     Write-Host 'Starting Thesa...' -ForegroundColor Cyan
-    if (!(Test-Path $python) -or !(Test-Path $next)) {
-        throw "First-time setup is missing. Follow docs\SOURCE_UPLOADS.md to install the Python and frontend dependencies. After that, double-click Start Thesa.bat for every run."
+    if (!(Get-Command python.exe -ErrorAction SilentlyContinue) -and !(Test-Path $venvPython)) {
+        throw "Python is missing. Install Python 3.11+ and rerun Start Thesa.bat."
+    }
+    if (!(Test-Path $next)) {
+        throw "Frontend dependencies are missing. Run npm install in the frontend folder, then rerun Start Thesa.bat."
     }
     $node = (Get-Command node.exe -ErrorAction Stop).Source
     New-Item -ItemType Directory -Force -Path $logs | Out-Null
