@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { TableKit } from "@tiptap/extension-table";
@@ -9,35 +9,41 @@ import { type DocumentNode, validateDocument, wordCount } from "@/lib/document";
 import { SafeImage, Footnote } from "./extensions";
 import { EditorTools } from "./EditorTools";
 import { useChapterSave } from "./useChapterSave";
+
 export type EditorHandle = {
   flush: () => Promise<boolean>;
   download: () => void;
+  insertCitation: (citationText: string) => void;
 };
+
 export function ChapterEditor({
   section,
+  chapterIndex,
+  chapterTotal,
   local,
   onSaved,
   onReady,
   onStatus,
-  researchProblem,
-  onUnavailable,
+  onCite,
 }: {
-  researchProblem: ReactNode;
-  onUnavailable: (feature: string) => void;
   section: Section;
+  chapterIndex: number;
+  chapterTotal: number;
   local: boolean;
   onSaved: (section: Section) => void;
   onReady: (handle: EditorHandle) => void;
   onStatus: (label: string) => void;
+  onCite: () => void;
 }) {
-  const [title, setTitle] = useState(section.title),
-    titleRef = useRef(section.title);
+  const [title, setTitle] = useState(section.title);
+  const titleRef = useRef(section.title);
   const [outline, setOutline] = useState<
     { text: string; pos: number; level: number }[]
   >([]);
   const save = useChapterSave(section, local, onSaved);
   const onChange = useRef(save.change);
   onChange.current = save.change;
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
@@ -49,7 +55,7 @@ export function ChapterEditor({
       Footnote,
       Placeholder.configure({
         placeholder:
-          "Start writing, paste your RRL, or type / for a writing tool…",
+          "Start writing, paste your literature review, or type / for a writing tool…",
       }),
     ],
     immediatelyRender: false,
@@ -79,14 +85,24 @@ export function ChapterEditor({
       setOutline(headings);
     },
   });
+
   const [slash, setSlash] = useState(false);
+
   useEffect(() => {
-    onReady({ flush: save.flush, download: () => save.downloadDraft() });
-  }, [onReady, save.flush, save.downloadDraft]);
+    onReady({
+      flush: save.flush,
+      download: () => save.downloadDraft(),
+      insertCitation: (citationText: string) => {
+        if (!editor) return;
+        editor.chain().focus().insertContent(` ${citationText}`).run();
+      },
+    });
+  }, [onReady, save.flush, save.downloadDraft, editor]);
+
   const label =
     save.status === "saved"
       ? local
-        ? "Saved in this browser"
+        ? "Saved in browser"
         : "Saved to cloud"
       : save.status === "saving"
         ? "Saving…"
@@ -95,11 +111,14 @@ export function ChapterEditor({
           : save.status === "conflict"
             ? "Save conflict"
             : "Not saved";
+
   useEffect(() => onStatus(label), [label, onStatus]);
+
   if (!editor)
     return (
       <div className="center-state editor-loading">Opening your chapter…</div>
     );
+
   const json = editor.getJSON() as DocumentNode;
   const footnotes: { id: string; text: string }[] = [];
   function collect(node: DocumentNode) {
@@ -111,10 +130,10 @@ export function ChapterEditor({
     node.content?.forEach(collect);
   }
   collect(json);
+
   return (
     <div className="chapter-editor">
-      <EditorTools editor={editor} onUnavailable={onUnavailable} />
-      {researchProblem}
+      <EditorTools editor={editor} onCite={onCite} />
       {save.recovery && (
         <div className="recovery-notice" role="status">
           <p>
@@ -167,6 +186,9 @@ export function ChapterEditor({
         aria-label="Writing surface"
       >
         <article className="document-paper live-paper">
+          <div className="paper-chapter-kicker">
+            Chapter {chapterIndex + 1} of {chapterTotal}
+          </div>
           <label className="sr-only" htmlFor="chapter-title">
             Chapter title
           </label>
@@ -217,7 +239,7 @@ export function ChapterEditor({
           </div>
           {slash && (
             <div className="slash-menu" aria-label="Writing tools">
-              <span>WRITING TOOLS</span>
+              <span>Insert block</span>
               {[
                 {
                   label: "Heading",
@@ -275,13 +297,9 @@ export function ChapterEditor({
         </article>
       </div>
       <footer className="document-status">
-        <span role="status">
-          <span className="status-dot" />
-          {label}
-        </span>
-        <span>
-          {wordCount(json).toLocaleString()} words ·{" "}
-          {local ? "Browser draft" : "Private document"}
+        <span role="status">{label}</span>
+        <span className="tabular-nums">
+          {wordCount(json).toLocaleString()} words · {local ? "Browser draft" : "Cloud draft"}
         </span>
       </footer>
     </div>

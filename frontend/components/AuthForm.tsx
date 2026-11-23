@@ -174,9 +174,14 @@ export function AuthForm({
             </div>
           )}
           {!configured && (
-            <Link className="preview-link" href="/">
-              Open browser drafts <ArrowRight size={15} />
-            </Link>
+            <div className="auth-preview-links">
+              <Link className="primary" href="/">
+                Open Split-Studio Workspace <ArrowRight size={15} />
+              </Link>
+              <Link className="secondary" href="/?library=1">
+                Browse Thesis Library
+              </Link>
+            </div>
           )}
         </section>
       </div>

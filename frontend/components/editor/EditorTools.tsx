@@ -8,26 +8,30 @@ import {
   List,
   ListOrdered,
   Quote,
+  Table2,
   Undo2,
   Redo2,
   Search,
   ImagePlus,
   Footprints,
+  BookMarked,
   X,
 } from "lucide-react";
 import { findText } from "@/lib/editor-search";
 import { isSafeImage } from "@/lib/document";
+
 export function EditorTools({
   editor,
-  onUnavailable,
+  onCite,
 }: {
   editor: Editor;
-  onUnavailable: (feature: string) => void;
+  onCite: () => void;
 }) {
-  const [tool, setTool] = useState<"find" | "image" | "footnote" | null>(null),
-    [find, setFind] = useState(""),
-    [replacement, setReplacement] = useState(""),
-    [message, setMessage] = useState("");
+  const [tool, setTool] = useState<"find" | "image" | "footnote" | null>(null);
+  const [find, setFind] = useState("");
+  const [replacement, setReplacement] = useState("");
+  const [message, setMessage] = useState("");
+
   function replaceAll() {
     const matches = findText(editor.state.doc, find);
     const chain = editor.chain();
@@ -40,8 +44,9 @@ export function EditorTools({
         ),
       );
     chain.run();
-    setMessage(matches.length + " replacements.");
+    setMessage(`${matches.length} replacement${matches.length === 1 ? "" : "s"}.`);
   }
+
   return (
     <>
       <div className="editor-toolbar" aria-label="Document formatting">
@@ -69,11 +74,12 @@ export function EditorTools({
                 .run();
           }}
         >
-          <option value="p">Normal text</option>
+          <option value="p">Normal</option>
           <option value="1">Heading 1</option>
           <option value="2">Heading 2</option>
           <option value="3">Heading 3</option>
         </select>
+        <span className="toolbar-sep" aria-hidden="true" />
         {[
           {
             name: "Bold",
@@ -99,18 +105,26 @@ export function EditorTools({
             active: editor.isActive("bulletList"),
             run: () => editor.chain().focus().toggleBulletList().run(),
           },
+          {
+            name: "Block quote",
+            Icon: Quote,
+            active: editor.isActive("blockquote"),
+            run: () => editor.chain().focus().toggleBlockquote().run(),
+          },
         ].map(({ name, Icon, active, run }) => (
           <button
             key={name}
+            type="button"
             aria-label={name}
             title={name}
             aria-pressed={active}
             onClick={run}
           >
-            {name === "Bullet list" ? "List" : <Icon size={16} />}
+            <Icon size={15} />
           </button>
         ))}
         <button
+          type="button"
           aria-label="Insert table"
           title="Insert table"
           onClick={() =>
@@ -121,96 +135,90 @@ export function EditorTools({
               .run()
           }
         >
-          Table
+          <Table2 size={15} />
         </button>
-        <button onClick={() => onUnavailable("Document comments")}>
-          Comment
+        <button
+          type="button"
+          aria-label="Insert footnote"
+          title="Insert footnote"
+          aria-pressed={tool === "footnote"}
+          onClick={() => setTool(tool === "footnote" ? null : "footnote")}
+        >
+          <Footprints size={15} />
         </button>
         <details className="more-tools">
           <summary>More</summary>
           <div>
             <button
+              type="button"
               aria-label="Numbered list"
               aria-pressed={editor.isActive("orderedList")}
               onClick={() => editor.chain().focus().toggleOrderedList().run()}
             >
-              <ListOrdered size={16} />
+              <ListOrdered size={15} />
               Numbered list
             </button>
             <button
-              aria-label="Block quote"
-              aria-pressed={editor.isActive("blockquote")}
-              onClick={() => editor.chain().focus().toggleBlockquote().run()}
-            >
-              <Quote size={16} />
-              Block quote
-            </button>
-            <button
+              type="button"
               aria-label="Insert image"
-              title="Insert image"
               onClick={() => setTool(tool === "image" ? null : "image")}
             >
-              <ImagePlus size={16} />
-              Image
+              <ImagePlus size={15} />
+              Image (HTTPS)
             </button>
             <button
-              aria-label="Insert footnote"
-              title="Insert footnote"
-              onClick={() => setTool(tool === "footnote" ? null : "footnote")}
-            >
-              <Footprints size={16} />
-              Footnote
-            </button>
-            <button
+              type="button"
               aria-label="Find and replace"
-              title="Find and replace"
               onClick={() => setTool(tool === "find" ? null : "find")}
             >
-              <Search size={16} />
-              Find and replace
+              <Search size={15} />
+              Find & replace
             </button>
             <button
+              type="button"
               aria-label="Undo"
-              title="Undo"
               disabled={!editor.can().undo()}
               onClick={() => editor.chain().focus().undo().run()}
             >
-              <Undo2 size={16} />
+              <Undo2 size={15} />
               Undo
             </button>
             <button
+              type="button"
               aria-label="Redo"
-              title="Redo"
               disabled={!editor.can().redo()}
               onClick={() => editor.chain().focus().redo().run()}
             >
-              <Redo2 size={16} />
+              <Redo2 size={15} />
               Redo
             </button>
           </div>
         </details>
         <button
+          type="button"
           className="citation-button"
-          onClick={() => onUnavailable("Citation insertion")}
+          onClick={onCite}
+          title="Open Source Viewer to insert a citation"
         >
-          Insert citation
+          <BookMarked size={14} />
+          Cite
         </button>
       </div>
       {editor.isActive("table") && (
         <div className="table-tools">
-          <button onClick={() => editor.chain().focus().addRowAfter().run()}>
+          <button type="button" onClick={() => editor.chain().focus().addRowAfter().run()}>
             Add row
           </button>
-          <button onClick={() => editor.chain().focus().addColumnAfter().run()}>
+          <button type="button" onClick={() => editor.chain().focus().addColumnAfter().run()}>
             Add column
           </button>
-          <button onClick={() => editor.chain().focus().deleteRow().run()}>
+          <button type="button" onClick={() => editor.chain().focus().deleteRow().run()}>
             Delete row
           </button>
-          <button onClick={() => editor.chain().focus().deleteColumn().run()}>
+          <button type="button" onClick={() => editor.chain().focus().deleteColumn().run()}>
             Delete column
           </button>
-          <button onClick={() => editor.chain().focus().deleteTable().run()}>
+          <button type="button" onClick={() => editor.chain().focus().deleteTable().run()}>
             Remove table
           </button>
         </div>
@@ -218,6 +226,7 @@ export function EditorTools({
       {tool && (
         <div className="editor-tool-panel">
           <button
+            type="button"
             className="tool-close icon-button"
             aria-label="Close editor tool"
             onClick={() => {
@@ -225,7 +234,7 @@ export function EditorTools({
               setMessage("");
             }}
           >
-            <X size={16} />
+            <X size={15} />
           </button>
           {tool === "find" ? (
             <div className="find-fields">
@@ -244,18 +253,20 @@ export function EditorTools({
                 />
               </label>
               <button
+                type="button"
                 className="secondary"
                 disabled={!find}
                 onClick={() => {
                   const matches = findText(editor.state.doc, find);
                   if (matches[0])
                     editor.chain().focus().setTextSelection(matches[0]).run();
-                  setMessage(matches.length + " matches.");
+                  setMessage(`${matches.length} match${matches.length === 1 ? "" : "es"}.`);
                 }}
               >
                 Find
               </button>
               <button
+                type="button"
                 className="secondary"
                 disabled={!find}
                 onClick={replaceAll}
@@ -302,18 +313,14 @@ export function EditorTools({
                 <input name="value" required maxLength={2000} />
               </label>
               {tool === "image" && (
-                <>
-                  <label>
-                    Image description
-                    <input name="alt" required maxLength={300} />
-                  </label>
-                  <p className="field-help">
-                    External images load from their host. Private file uploads
-                    arrive with the source library.
-                  </p>
-                </>
+                <label>
+                  Image description
+                  <input name="alt" required maxLength={300} />
+                </label>
               )}
-              <button className="primary">Insert {tool}</button>
+              <button className="primary">
+                Insert {tool}
+              </button>
             </form>
           )}
           {message && <p role="status">{message}</p>}
