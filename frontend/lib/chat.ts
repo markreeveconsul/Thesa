@@ -80,7 +80,7 @@ export async function askSources(
       "These files have no searchable text. Check the extraction warning in the source library; scanned PDFs need OCR before Otto can read them.",
     );
   const url =
-    process.env.NEXT_PUBLIC_DOCUMENT_API_URL || "http://127.0.0.1:8000";
+    process.env.NEXT_PUBLIC_DOCUMENT_API_URL || "/api/document";
   let response: Response;
   try {
     response = await fetch(url.replace(/\/$/, "") + "/chat", {

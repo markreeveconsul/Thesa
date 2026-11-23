@@ -36,10 +36,7 @@ export function PdfPage({
     void (async () => {
       try {
         const pdfjs = await import("pdfjs-dist");
-        pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-          "pdfjs-dist/build/pdf.worker.min.mjs",
-          import.meta.url,
-        ).toString();
+        pdfjs.GlobalWorkerOptions.workerSrc = "/api/pdf-worker";
         const data = new Uint8Array(await blob.arrayBuffer());
         if (canceled) return;
         const task = pdfjs.getDocument({

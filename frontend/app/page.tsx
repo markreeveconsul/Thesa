@@ -4,10 +4,15 @@ import { getSupabaseConfig, requireBrowserDraftMode } from "@/lib/config";
 import { createClient } from "@/lib/supabase/server";
 import type { Project } from "@/lib/workspace";
 export const dynamic = "force-dynamic";
-export default async function Home() {
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ library?: string }>;
+}) {
+  const params = await searchParams;
   if (!getSupabaseConfig()) {
     requireBrowserDraftMode();
-    return <Dashboard local projects={[]} />;
+    return <Dashboard local projects={[]} autoOpen={params.library !== "1"} />;
   }
   const client = await createClient();
   const {

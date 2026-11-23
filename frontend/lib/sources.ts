@@ -388,7 +388,7 @@ export async function uploadSource(
     throw new Error("This file is already in this project's source library.");
   signal.throwIfAborted();
   const url =
-    process.env.NEXT_PUBLIC_DOCUMENT_API_URL || "http://127.0.0.1:8000";
+    process.env.NEXT_PUBLIC_DOCUMENT_API_URL || "/api/document";
   onStage("Uploading and extracting text…");
   let response: Response;
   try {

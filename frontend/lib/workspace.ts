@@ -1,7 +1,8 @@
+export type CitationStyle = "apa" | "mla" | "ieee";
 export type Project = {
   id: string;
   title: string;
-  citation_style: "apa" | "mla" | "ieee";
+  citation_style: CitationStyle;
   research_problem?: string;
   structure?: "five-chapter" | "blank";
   updated_at?: string;

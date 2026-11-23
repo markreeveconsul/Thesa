@@ -113,7 +113,7 @@ export async function askFeasibilityFollowUp(
   evidence: Citation[],
   signal: AbortSignal,
 ): Promise<string> {
-  const base = process.env.NEXT_PUBLIC_DOCUMENT_API_URL || "http://127.0.0.1:8000";
+  const base = process.env.NEXT_PUBLIC_DOCUMENT_API_URL || "/api/document";
   const response = await fetch(`${base.replace(/\/$/, "")}/feasibility/follow-up`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -177,7 +177,7 @@ export async function runFeasibility(
   signal: AbortSignal,
 ): Promise<FeasibilityReport> {
   const evidence = selectEvidence(inputs, sources);
-  const base = process.env.NEXT_PUBLIC_DOCUMENT_API_URL || "http://127.0.0.1:8000";
+  const base = process.env.NEXT_PUBLIC_DOCUMENT_API_URL || "/api/document";
   let response: Response;
   try {
     response = await fetch(`${base.replace(/\/$/, "")}/feasibility`, {
