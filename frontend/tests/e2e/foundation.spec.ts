@@ -9,8 +9,7 @@ test("dashboard creates a five-chapter thesis and persists writing across reload
   await createThesis(page);
   await expect(
     page.getByRole("button", {
-      name: "2 Review of related literature",
-      exact: true,
+      name: /2\.\s*Review of related literature/,
     }),
   ).toBeVisible();
   const content = page.getByRole("textbox", {
@@ -21,12 +20,15 @@ test("dashboard creates a five-chapter thesis and persists writing across reload
   await saved(page);
   await page.reload();
   await expect(content).toContainText("Feedback helps students reflect");
-  await expect(page.getByText("7 words · Browser draft")).toBeVisible();
+  await expect(page.getByText(/7 words · ~\d+ min read/)).toBeVisible();
   await page.getByRole("link", { name: "Thesa", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Your theses", exact: true }),
   ).toBeVisible();
-  await page.getByRole("link", { name: /Learning and feedback/ }).click();
+  await page
+    .locator(".thesis-card", { hasText: "Learning and feedback" })
+    .getByRole("link", { name: /Open workspace/ })
+    .click();
   await expect(content).toContainText("Feedback helps students reflect");
   expect(errors).toEqual([]);
   await page.screenshot({
@@ -91,27 +93,26 @@ test("chapter switching flushes pending edits and chapter order survives reload"
   await content.fill("A draft typed immediately before changing chapters.");
   await page
     .getByRole("button", {
-      name: "2 Review of related literature",
-      exact: true,
+      name: /2\.\s*Review of related literature/,
     })
     .click();
   await expect(
     page.getByRole("textbox", { name: "Chapter title", exact: true }),
   ).toHaveValue("Review of related literature");
   await page
-    .getByRole("button", { name: "1 Introduction", exact: true })
+    .getByRole("button", { name: /1\.\s*Introduction/ })
     .click();
   await expect(content).toContainText("A draft typed immediately");
   await page
     .getByRole("button", { name: "Move Introduction down", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "2 Introduction", exact: true }),
+    page.getByRole("button", { name: /2\.\s*Introduction/ }),
   ).toBeVisible();
   await expect(content).toContainText("A draft typed immediately");
   await page.reload();
   await expect(
-    page.getByRole("button", { name: "2 Introduction", exact: true }),
+    page.getByRole("button", { name: /2\.\s*Introduction/ }),
   ).toBeVisible();
 });
 
@@ -149,7 +150,7 @@ test("research problem changes persist and blank projects have usable starting c
   await createThesis(page, "A new question", "blank");
   await expect(
     page.getByRole("heading", {
-      name: "Start your first section",
+      name: "Start your first chapter",
       exact: true,
     }),
   ).toBeVisible();
@@ -157,68 +158,60 @@ test("research problem changes persist and blank projects have usable starting c
   await expect(
     page.getByRole("textbox", { name: "Chapter content", exact: true }),
   ).toBeVisible();
-  await page.locator(".research-problem summary").click();
   await page
-    .getByRole("textbox", { name: "Research problem", exact: true })
+    .getByRole("button", { name: "Edit research question", exact: true })
+    .click();
+  await page
+    .getByRole("textbox", { name: "Research question", exact: true })
     .fill("How do students act on feedback?");
   await page
-    .getByRole("button", { name: "Save research problem", exact: true })
+    .getByRole("button", { name: "Save", exact: true })
     .click();
-  await expect(page.locator(".research-problem summary")).toContainText(
+  await expect(page.locator(".pinned-question-text")).toContainText(
     "How do students act on feedback?",
   );
   await page.reload();
-  await expect(page.locator(".research-problem summary")).toContainText(
+  await expect(page.locator(".pinned-question-text")).toContainText(
     "How do students act on feedback?",
   );
 });
 
-test("theme, command palette, focus and source navigation work", async ({
+test("theme, command palette, focus and source studio work", async ({
   page,
 }) => {
   await createThesis(page);
-  await page.getByRole("button", { name: "Focus mode", exact: true }).click();
+  await page.getByRole("button", { name: "Focus", exact: true }).click();
   await expect(
-    page.getByRole("dialog", {
-      name: "Otto assistant",
+    page.getByRole("complementary", {
+      name: "Research and source studio",
       exact: true,
     }),
   ).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await page.getByRole("button", { name: "Open Otto assistant" }).click();
   await expect(
-    page.getByRole("dialog", { name: "Otto assistant" }),
+    page.getByRole("complementary", {
+      name: "Research and source studio",
+      exact: true,
+    }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Dock", exact: true }).click();
-  await expect(page.locator(".otto-panel")).toHaveClass(/docked/);
-  await page.getByRole("button", { name: "Float", exact: true }).click();
-  await page.screenshot({
-    path: "test-results/otto-floating.png",
-    fullPage: true,
-  });
-  await page.keyboard.press("Escape");
+  await page.getByRole("tab", { name: "Otto", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Open Otto assistant" }),
-  ).toBeFocused();
+    page.getByRole("tabpanel", { name: "Otto assistant" }),
+  ).toBeVisible();
   await page
     .getByRole("button", { name: "Use dark theme", exact: true })
     .click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await page.keyboard.press("Control+Shift+k");
   await page.getByRole("textbox", { name: "Search commands" }).fill("sources");
-  await page.getByRole("button", { name: "Show sources", exact: true }).click();
-  await expect(page.getByRole("heading", { name: /Sources/ })).toBeVisible();
-  await page.screenshot({
-    path: "test-results/sources-thesa.png",
-    fullPage: true,
-  });
+  await page.getByRole("button", { name: "Manage Sources", exact: true }).click();
+  await expect(
+    page.getByRole("tabpanel", { name: "Sources" }),
+  ).toBeVisible();
   await expect(page.getByLabel("Choose source files")).toHaveAttribute(
     "accept",
     ".pdf,.docx,.txt",
   );
-  await page
-    .getByRole("button", { name: "Back to editor", exact: true })
-    .click();
   await page.screenshot({
     path: "test-results/editor-dark.png",
     fullPage: true,
@@ -239,10 +232,10 @@ test("mobile editor and panel navigation fit the viewport", async ({
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
-  await mobile.getByRole("button", { name: "Assistant", exact: true }).click();
+  await mobile.getByRole("button", { name: "Studio", exact: true }).click();
   await expect(
-    page.getByRole("dialog", {
-      name: "Otto assistant",
+    page.getByRole("complementary", {
+      name: "Research and source studio",
       exact: true,
     }),
   ).toBeVisible();

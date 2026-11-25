@@ -85,7 +85,13 @@ def parse_in_worker(content: bytes, filename: str) -> dict[str, object]:
 
 @app.get("/health")
 def health() -> dict[str, object]:
-    return {"status": "ok", "service": "thesa-documents", "max_upload_bytes": MAX_BYTES, "max_pdf_pages": MAX_PAGES}
+    return {
+        "status": "ok",
+        "service": "thesa-documents",
+        "workspace": os.getenv("THESA_WORKSPACE_MARKER", ""),
+        "max_upload_bytes": MAX_BYTES,
+        "max_pdf_pages": MAX_PAGES,
+    }
 
 
 @app.post("/parse")

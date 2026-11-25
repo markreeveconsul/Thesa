@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "@playwright/test";
 import { createThesis } from "./helpers";
+
 for (const theme of ["light", "dark"]) {
   test(
     "dashboard and editor have no detected WCAG AA violations in " + theme,
@@ -9,7 +10,7 @@ for (const theme of ["light", "dark"]) {
         (value) => localStorage.setItem("thesisdesk-theme", value),
         theme,
       );
-      await page.goto("/");
+      await page.goto("/?library=1");
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       expect(
         (

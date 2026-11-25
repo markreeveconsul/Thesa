@@ -3,8 +3,10 @@ import { Otto } from "./Otto";
 import Link from "next/link";
 import { Brand } from "./Brand";
 import { useActionState, useState } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Check } from "lucide-react";
 import { authenticate, signInWithGoogle } from "@/app/auth/actions";
+
+type AuthMode = "login" | "signup" | "reset" | "update";
 
 export function AuthForm({
   configured,
@@ -17,7 +19,7 @@ export function AuthForm({
   linkError?: boolean;
   oauthError?: boolean;
 }) {
-  const [mode, setMode] = useState(recovery ? "update" : "login");
+  const [mode, setMode] = useState<AuthMode>(recovery ? "update" : "login");
   const [state, action, pending] = useActionState(authenticate, {});
   const [googleState, googleAction, googlePending] = useActionState(
     signInWithGoogle,
@@ -29,41 +31,70 @@ export function AuthForm({
     reset: "Find your way back.",
     update: "Choose a new password.",
   }[mode];
+
   return (
     <main className="auth-page">
       <div className="auth-layout">
         <section className="auth-intro">
+          <span className="auth-intro-eyebrow">THESA STUDIO · ARCHIVAL EDITION</span>
           <h1>Your thesis, backed by every source you read.</h1>
           <p>
-            A thoughtful space to write, connect your sources, and develop your
-            thesis—one paragraph at a time.
+            Read your PDFs beside your manuscript, verify every claim with
+            grounded citations, and keep your argument tethered to your research
+            problem.
           </p>
           <div className="auth-manuscript">
-            <Otto animate />
-            <span className="eyebrow">ILLUSTRATIVE PREVIEW</span>
-            <h3>From reading to understanding.</h3>
+            <div className="auth-manuscript-head">
+              <span className="eyebrow">CHAPTER II · LITERATURE SYNTHESIS</span>
+              <Otto pose="welcome" size="md" animate />
+            </div>
             <p>
-              Bring your ideas and your reading together. Keep your research
-              question close as you develop each paragraph.
+              Learners now spend several hours each day on social platforms
+              <strong>Dela Cruz &amp; Lim, 2022</strong>, shaping the cadence
+              they reserve for deep academic reading.
             </p>
-            <span className="sample-citation">
-              Trace claims to their sources
-            </span>
+            <div className="auth-manuscript-meta">
+              <span className="sample-citation">Dela Cruz &amp; Lim, p. 4</span>
+              <span aria-hidden="true" className="auth-meta-dot">·</span>
+              <span className="auth-preview-fit">
+                Aligned with your research problem
+              </span>
+            </div>
           </div>
+
+          <ul className="auth-pillars" aria-label="Workspace highlights">
+            <li>
+              <Check size={14} aria-hidden="true" />
+              <span>Source-grounded Q&amp;A with page citations</span>
+            </li>
+            <li>
+              <Check size={14} aria-hidden="true" />
+              <span>6-dimension thesis feasibility diagnostic</span>
+            </li>
+            <li>
+              <Check size={14} aria-hidden="true" />
+              <span>APA 7, MLA 9 &amp; IEEE inline citing + Markdown export</span>
+            </li>
+          </ul>
         </section>
+
         <section className="auth-card">
           <Link href="/" className="wordmark">
             <Brand />
           </Link>
           <span className="eyebrow">THESA</span>
+
           <h2>{title}</h2>
           <p>
             {mode === "login"
-              ? "Sign in to return to your writing."
+              ? "Sign in to continue your thesis."
               : mode === "signup"
                 ? "Create your private research workspace."
-                : "We’ll help you securely access your workspace."}
+                : mode === "reset"
+                  ? "Enter your university or personal email to receive a recovery link."
+                  : "Set a strong password for your workspace."}
           </p>
+
           {!configured && (
             <p className="notice">
               Account setup is pending. You can write browser drafts without an
@@ -72,8 +103,8 @@ export function AuthForm({
           )}
           {linkError && (
             <p role="alert" className="error-text">
-              Sign-in could not be completed. Please try again. If it keeps
-              happening, check Supabase provider and callback settings.
+              This sign-in link is invalid or expired. Please try signing in
+              again, or check Supabase provider and callback settings.
             </p>
           )}
           {oauthError && (
@@ -83,11 +114,12 @@ export function AuthForm({
               test user if the consent screen is in testing mode.
             </p>
           )}
+
           <form action={action} className="stack">
             <input type="hidden" name="mode" value={mode} />
             {mode !== "update" && (
               <label>
-                Email address
+                Email
                 <input
                   name="email"
                   type="email"
@@ -104,6 +136,7 @@ export function AuthForm({
                 <input
                   name="password"
                   type="password"
+                  placeholder="Your password"
                   required
                   minLength={mode === "login" ? 1 : 12}
                   maxLength={128}
@@ -138,6 +171,7 @@ export function AuthForm({
               <ArrowRight size={16} />
             </button>
           </form>
+
           {mode === "login" && (
             <form action={googleAction}>
               {googleState.error && (
@@ -157,25 +191,22 @@ export function AuthForm({
           {!recovery && (
             <div className="auth-links">
               <button
+                type="button"
                 className="text-button"
                 onClick={() => setMode(mode === "signup" ? "login" : "signup")}
               >
                 {mode === "signup"
                   ? "Already have an account? Sign in"
-                  : "Create an account"}
+                  : "New here? Create an account"}
               </button>
               <button
+                type="button"
                 className="text-button"
                 onClick={() => setMode(mode === "reset" ? "login" : "reset")}
               >
                 {mode === "reset" ? "Back to sign in" : "Forgot password?"}
               </button>
             </div>
-          )}
-          {!configured && (
-            <Link className="preview-link" href="/">
-              Open browser drafts <ArrowRight size={15} />
-            </Link>
           )}
         </section>
       </div>
