@@ -22,7 +22,7 @@ This Gemini trial uses a hosted proprietary model and does not meet the original
 
 ## Run locally
 
-**Windows shortcut:** after the one-time dependency setup in [SOURCE_UPLOADS.md](docs/SOURCE_UPLOADS.md), double-click **Start Thesa.bat** in the repository root. It starts the frontend and document parser, then opens `http://127.0.0.1:3002`. No terminal commands are needed for subsequent runs. Keep its status window open; press Enter there to stop the services it started. Existing compatible services are reused and left running. Diagnostic logs are in ignored `.thesa-run/`. The older `Start Thesa.cmd` also remains compatible.
+**Windows shortcut:** after the one-time dependency setup in [SOURCE_UPLOADS.md](docs/SOURCE_UPLOADS.md), double-click **Start Thesa.bat** in this repository root. It starts the frontend and document parser, then opens `http://127.0.0.1:3002`. No terminal commands are needed for subsequent runs. Keep its status window open; press Enter there to stop the services it started. Only services verified as belonging to this checkout are reused; another Thesa checkout or a production build occupying the standard ports is rejected instead of silently showing stale code. Diagnostic logs are in ignored `.thesa-run/`. The older `Start Thesa.cmd` also remains compatible.
 
 Browser drafts are tied to the exact address: `localhost`, `127.0.0.1` and different ports have separate storage. The launcher consistently uses `127.0.0.1:3002`; it does not move drafts from another address.
 

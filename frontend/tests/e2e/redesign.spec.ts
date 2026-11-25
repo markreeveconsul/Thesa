@@ -2,7 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { test, expect } from "@playwright/test";
 import { createThesis, saved } from "./helpers";
 
-test("Otto toggles and docks without losing edits; evidence viewer uses the saved draft", async ({
+test("Research Studio drawer toggles without losing edits and keeps tabs accessible", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -12,15 +12,31 @@ test("Otto toggles and docks without losing edits; evidence viewer uses the save
     exact: true,
   });
   await editor.fill("Keep this paragraph while comparing evidence.");
-  const before = await editor.boundingBox();
+  const drawer = page.getByRole("complementary", {
+    name: "Research and source studio",
+  });
+  await expect(drawer).toBeVisible();
+  const withDrawer = await editor.boundingBox();
+
+  // Ctrl/Cmd+K closes the drawer cleanly and expands editor canvas width
   await page.keyboard.press("Control+k");
-  const panel = page.getByRole("dialog", { name: "Otto assistant" });
-  await expect(panel).toBeVisible();
-  await expect(page.getByRole("button", { name: "Close Otto" })).toBeFocused();
-  await expect(page.getByRole("textbox", { name: "Ask Otto" })).toBeDisabled();
-  await page.getByRole("button", { name: "Dock", exact: true }).click();
-  await expect(page.locator(".otto-panel")).toHaveClass(/docked/);
-  expect((await editor.boundingBox())!.width).toBeLessThan(before!.width);
+  await expect(drawer).toHaveCount(0);
+  expect((await editor.boundingBox())!.width).toBeGreaterThan(withDrawer!.width);
+
+  // Ctrl/Cmd+K reopens the Split-Studio drawer
+  await page.keyboard.press("Control+k");
+  await expect(drawer).toBeVisible();
+
+  await drawer.getByRole("tab", { name: "Otto", exact: true }).click();
+  await expect(
+    drawer.getByRole("button", { name: "Enable Otto chat", exact: true }),
+  ).toBeVisible();
+
+  await drawer.getByRole("tab", { name: /Sources \(/ }).click();
+  await expect(
+    drawer.getByRole("tabpanel", { name: "Sources" }),
+  ).toBeVisible();
+
   await expect(editor).toHaveText(
     "Keep this paragraph while comparing evidence.",
   );
@@ -32,40 +48,4 @@ test("Otto toggles and docks without losing edits; evidence viewer uses the save
         .analyze()
     ).violations,
   ).toEqual([]);
-  await page.keyboard.press("Escape");
-  await expect(panel).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Open Otto assistant" }),
-  ).toBeFocused();
-  await page
-    .getByRole("button", { name: "Upload sources", exact: true })
-    .click();
-  await page.screenshot({
-    path: "test-results/sources-light.png",
-    fullPage: true,
-  });
-  await page.getByRole("button", { name: "Open evidence viewer" }).click();
-  await expect(page.locator(".reader-excerpt")).toHaveText(
-    "Keep this paragraph while comparing evidence.",
-  );
-  await expect(
-    page.getByRole("button", { name: "Choose a source", exact: true }),
-  ).toBeVisible();
-  await page.screenshot({
-    path: "test-results/evidence-reader.png",
-    fullPage: true,
-  });
-  expect(
-    (
-      await new AxeBuilder({ page })
-        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
-        .analyze()
-    ).violations,
-  ).toEqual([]);
-  await page
-    .getByRole("button", { name: "Back to editor", exact: true })
-    .click();
-  await expect(editor).toHaveText(
-    "Keep this paragraph while comparing evidence.",
-  );
 });

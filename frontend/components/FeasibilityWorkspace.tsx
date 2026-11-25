@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   AlertCircle,
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
   Copy,
   Download,
@@ -34,6 +36,7 @@ import {
   saveFeasibilityAssessment,
 } from "@/app/feasibility-actions";
 import type { Citation } from "@/lib/chat";
+import { FeasibilityPieChart } from "./FeasibilityPieChart";
 
 const blank: FeasibilityInputs = {
   topic: "",
@@ -210,7 +213,14 @@ export function FeasibilityWorkspace({
   const [followUpQuestion, setFollowUpQuestion] = useState("");
   const [followUpAnswer, setFollowUpAnswer] = useState("");
   const [followUpBusy, setFollowUpBusy] = useState(false);
+  const [activeDimension, setActiveDimension] = useState<
+    keyof FeasibilityReport["dimensions"] | null
+  >(null);
+  const [activePhase, setActivePhase] = useState(0);
   const activeRequest = useRef<AbortController | null>(null);
+  const dimensionRefs = useRef<
+    Partial<Record<keyof FeasibilityReport["dimensions"], HTMLElement | null>>
+  >({});
 
   useEffect(() => {
     let alive = true;
@@ -757,14 +767,32 @@ export function FeasibilityWorkspace({
                 </div>
               </div>
 
-              <div className="feasibility-score-box">
-                <div className="feasibility-score-num tabular-nums">
-                  <strong>{strongCount}</strong>
-                  <span>/ {dimensionResults.length}</span>
-                </div>
-                <small>Dimensions workable</small>
-                <div className="feasibility-score-breakdown tabular-nums">
+              <div className="feasibility-chart-panel">
+                <FeasibilityPieChart
+                  dimensions={dimensionResults.map((dim) => ({
+                    key: dim.key,
+                    label: dim.label,
+                    shortLabel: dim.key === "method_fit" ? "Method" : dim.label,
+                    status: dim.item.status,
+                  }))}
+                  activeKey={activeDimension}
+                  onSelect={(key, scrollToCard) => {
+                    setActiveDimension(key);
+                    if (scrollToCard) {
+                      dimensionRefs.current[key]?.scrollIntoView({
+                        behavior: "smooth",
+                        block: "nearest",
+                      });
+                    }
+                  }}
+                />
+                <div className="feasibility-score-summary tabular-nums">
+                  <span>
+                    <strong>{strongCount}</strong>/{dimensionResults.length} workable
+                  </span>
+                  <span aria-hidden="true">·</span>
                   <span>{planningCount} need planning</span>
+                  <span aria-hidden="true">·</span>
                   <span>{clarityCount} need clarity</span>
                 </div>
               </div>
@@ -775,7 +803,7 @@ export function FeasibilityWorkspace({
                 Dimension breakdown
               </h3>
               <div className="feasibility-dimensions">
-                {dimensionResults.map(({ key, label, item }) => {
+                {dimensionResults.map(({ key, label, item }, idx) => {
                   const Icon =
                     key === "scope"
                       ? Triangle
@@ -795,7 +823,19 @@ export function FeasibilityWorkspace({
                         ? "planning"
                         : "clarity";
                   return (
-                    <article className="feasibility-dimension" key={key}>
+                    <article
+                      className={
+                        "feasibility-dimension is-animated" +
+                        (activeDimension === key ? " is-linked" : "")
+                      }
+                      style={{ "--stagger": idx } as CSSProperties}
+                      key={key}
+                      ref={(el) => {
+                        dimensionRefs.current[key] = el;
+                      }}
+                      onMouseEnter={() => setActiveDimension(key)}
+                      onClick={() => setActiveDimension(key)}
+                    >
                       <div className="feasibility-dim-head">
                         <h4>
                           <Icon size={15} />
@@ -846,7 +886,8 @@ export function FeasibilityWorkspace({
                 <div className="feasibility-fix-grid">
                   {fixCards.map((fix, index) => (
                     <article
-                      className="feasibility-fix-card"
+                      className="feasibility-fix-card is-animated"
+                      style={{ "--stagger": index } as CSSProperties}
                       key={`${fix.title}-${index}`}
                     >
                       <div className="feasibility-fix-top">
@@ -883,29 +924,107 @@ export function FeasibilityWorkspace({
                     </strong>
                   </p>
                 </div>
+                {selectedReport.next_steps.length > 1 && (
+                  <div className="feasibility-phase-nav">
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label="Previous phase"
+                      disabled={activePhase <= 0}
+                      onClick={() => setActivePhase((p) => Math.max(0, p - 1))}
+                    >
+                      <ChevronLeft size={15} />
+                    </button>
+                    <span className="tabular-nums">
+                      Phase {Math.min(activePhase + 1, selectedReport.next_steps.length)} of{" "}
+                      {selectedReport.next_steps.length}
+                    </span>
+                    <button
+                      type="button"
+                      className="icon-button"
+                      aria-label="Next phase"
+                      disabled={activePhase >= selectedReport.next_steps.length - 1}
+                      onClick={() =>
+                        setActivePhase((p) =>
+                          Math.min(selectedReport.next_steps.length - 1, p + 1),
+                        )
+                      }
+                    >
+                      <ChevronRight size={15} />
+                    </button>
+                  </div>
+                )}
               </div>
 
-              {!!selectedReport.next_steps.length && (
-                <ol className="feasibility-milestones">
-                  {selectedReport.next_steps.map((stepItem, index) => (
-                    <li key={index}>
-                      <strong>{stepItem.action}</strong>
-                      <p>{stepItem.reason}</p>
-                      {(stepItem.citations ?? []).map((citation) => (
-                        <button
-                          type="button"
-                          key={citation.id}
-                          className="text-button"
-                          onClick={() => onCitation(citation)}
-                        >
-                          {citation.filename} · {citation.locator_type}{" "}
-                          {citation.location}
-                        </button>
-                      ))}
-                    </li>
-                  ))}
-                </ol>
-              )}
+              {!!selectedReport.next_steps.length && (() => {
+                const safeIndex = Math.min(
+                  activePhase,
+                  selectedReport.next_steps.length - 1,
+                );
+                const activeStep = selectedReport.next_steps[safeIndex];
+                return (
+                  <div className="feasibility-timeline-interactive">
+                    <div
+                      className="feasibility-timeline-strip"
+                      role="tablist"
+                      aria-label="Execution milestone phases"
+                    >
+                      {selectedReport.next_steps.map((stepItem, index) => {
+                        const isActive = index === safeIndex;
+                        const isDone = index < safeIndex;
+                        return (
+                          <button
+                            type="button"
+                            role="tab"
+                            aria-selected={isActive}
+                            key={index}
+                            className={
+                              "feasibility-phase-btn" +
+                              (isActive ? " active" : "") +
+                              (isDone ? " passed" : "")
+                            }
+                            onClick={() => setActivePhase(index)}
+                          >
+                            <span className="feasibility-phase-num tabular-nums">
+                              0{index + 1}
+                            </span>
+                            <strong>{stepItem.action}</strong>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {activeStep && (
+                      <article
+                        className="feasibility-phase-detail"
+                        key={safeIndex}
+                        role="tabpanel"
+                      >
+                        <div className="feasibility-phase-detail-kicker tabular-nums">
+                          Phase {safeIndex + 1} deliverable
+                        </div>
+                        <h4>{activeStep.action}</h4>
+                        <p>{activeStep.reason}</p>
+                        {!!(activeStep.citations ?? []).length && (
+                          <div className="feasibility-phase-citations">
+                            {(activeStep.citations ?? []).map((citation) => (
+                              <button
+                                type="button"
+                                key={citation.id}
+                                className="text-button"
+                                onClick={() => onCitation(citation)}
+                              >
+                                {citation.filename} · {citation.locator_type}{" "}
+                                {citation.location}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </article>
+                    )}
+                  </div>
+                );
+              })()}
             </section>
 
             <div className="feasibility-detail-columns">
@@ -914,7 +1033,8 @@ export function FeasibilityWorkspace({
                   <h3>Risks &amp; mitigations</h3>
                   {selectedReport.risks.map((risk, index) => (
                     <article
-                      className="feasibility-risk-item"
+                      className="feasibility-risk-item is-animated"
+                      style={{ "--stagger": index } as CSSProperties}
                       key={`${risk.title}-${index}`}
                     >
                       <h4>{risk.title}</h4>
@@ -1028,6 +1148,8 @@ export function FeasibilityWorkspace({
                         onClick={() => {
                           setSelected(item);
                           setInputs(item.inputs);
+                          setActiveDimension(null);
+                          setActivePhase(0);
                         }}
                       >
                         <strong>{item.inputs.topic}</strong>

@@ -2,7 +2,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { ArrowRight, BookOpen, Plus, Trash2, X } from "lucide-react";
 import { Brand } from "./Brand";
 import { Otto } from "./Otto";
@@ -16,6 +16,52 @@ import {
   readLocal,
 } from "@/lib/local-workspace";
 import type { Project, Section } from "@/lib/workspace";
+
+type StructureFilter = "all" | "five-chapter" | "blank";
+type SortMode = "recent" | "words" | "title";
+
+function ThesisProgressRing({
+  percentage,
+  complete,
+}: {
+  percentage: number;
+  complete: boolean;
+}) {
+  const radius = 16;
+  const circumference = 2 * Math.PI * radius;
+  const clamped = Math.max(0, Math.min(100, percentage));
+  const offset = circumference - (clamped / 100) * circumference;
+
+  return (
+    <div
+      className={"thesis-progress-ring" + (complete ? " is-complete" : "")}
+      aria-label={`${clamped}% chapters drafted`}
+    >
+      <svg width="42" height="42" viewBox="0 0 42 42" aria-hidden="true">
+        <circle
+          className="thesis-ring-track"
+          cx="21"
+          cy="21"
+          r={radius}
+          fill="none"
+          strokeWidth="3"
+        />
+        <circle
+          className="thesis-ring-fill"
+          cx="21"
+          cy="21"
+          r={radius}
+          fill="none"
+          strokeWidth="3"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          strokeLinecap="round"
+        />
+      </svg>
+      <span className="thesis-ring-label tabular-nums">{clamped}%</span>
+    </div>
+  );
+}
 
 export function Dashboard({
   local,
@@ -33,6 +79,8 @@ export function Dashboard({
   const [createOpen, setCreateOpen] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string>();
   const [redirecting, setRedirecting] = useState(local && autoOpen);
+  const [filter, setFilter] = useState<StructureFilter>("all");
+  const [sortBy, setSortBy] = useState<SortMode>("recent");
 
   useEffect(() => {
     if (!local) return;
@@ -109,6 +157,59 @@ export function Dashboard({
     setConfirmDeleteId(undefined);
   }
 
+  const enriched = items.map((project, originalIndex) => {
+    const projectSections = sections.filter((s) => s.project_id === project.id);
+    const totalWords = projectSections.reduce(
+      (sum, s) => sum + wordCount(s.content as unknown as DocumentNode),
+      0,
+    );
+    const draftedChapters = projectSections.filter(
+      (s) => wordCount(s.content as unknown as DocumentNode) > 25,
+    ).length;
+    const totalChapters = projectSections.length;
+    const completionPct = totalChapters
+      ? Math.round((draftedChapters / totalChapters) * 100)
+      : 0;
+    const inferredStructure: "five-chapter" | "blank" =
+      project.structure ?? (totalChapters >= 5 ? "five-chapter" : "blank");
+
+    return {
+      project,
+      originalIndex,
+      totalWords,
+      draftedChapters,
+      totalChapters,
+      completionPct,
+      inferredStructure,
+    };
+  });
+
+  const libraryTotalWords = enriched.reduce(
+    (sum, item) => sum + item.totalWords,
+    0,
+  );
+
+  const visibleItems = enriched
+    .filter((entry) =>
+      filter === "all" ? true : entry.inferredStructure === filter,
+    )
+    .sort((a, b) => {
+      if (sortBy === "words" && local) {
+        return b.totalWords - a.totalWords;
+      }
+      if (sortBy === "title") {
+        return a.project.title.localeCompare(b.project.title);
+      }
+      const dateA = a.project.updated_at
+        ? Date.parse(a.project.updated_at)
+        : 0;
+      const dateB = b.project.updated_at
+        ? Date.parse(b.project.updated_at)
+        : 0;
+      if (dateA && dateB && dateA !== dateB) return dateB - dateA;
+      return a.originalIndex - b.originalIndex;
+    });
+
   return (
     <div className="dashboard">
       <header className="topbar">
@@ -150,11 +251,57 @@ export function Dashboard({
           <div className="dashboard-title">
             <span className="eyebrow">THESIS LIBRARY</span>
             <h1>Your theses</h1>
-            <p>
-              Open a manuscript to write alongside your sources, or start a new
-              research project.
+            <p className="tabular-nums">
+              {items.length > 0
+                ? `${items.length} ${items.length === 1 ? "manuscript" : "manuscripts"}${
+                    local
+                      ? ` · ${libraryTotalWords.toLocaleString()} words total`
+                      : ""
+                  }`
+                : "Open a manuscript to write alongside your sources, or start a new research project."}
             </p>
           </div>
+
+          {items.length > 0 && (
+            <div className="dashboard-controls">
+              <div
+                className="dashboard-filter-tabs"
+                role="tablist"
+                aria-label="Filter by thesis structure"
+              >
+                {(
+                  [
+                    { id: "all", label: "All" },
+                    { id: "five-chapter", label: "Five-chapter" },
+                    { id: "blank", label: "Blank" },
+                  ] as const
+                ).map((tabItem) => (
+                  <button
+                    key={tabItem.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={filter === tabItem.id}
+                    className={filter === tabItem.id ? "active" : ""}
+                    onClick={() => setFilter(tabItem.id)}
+                  >
+                    {tabItem.label}
+                  </button>
+                ))}
+              </div>
+              <label className="dashboard-sort-wrap">
+                <span className="sr-only">Sort theses</span>
+                <select
+                  aria-label="Sort theses"
+                  value={sortBy}
+                  onChange={(event) => setSortBy(event.target.value as SortMode)}
+                >
+                  <option value="recent">Recently updated</option>
+                  {local && <option value="words">Most words</option>}
+                  <option value="title">Title A–Z</option>
+                </select>
+              </label>
+            </div>
+          )}
         </div>
 
         {error && (
@@ -165,90 +312,129 @@ export function Dashboard({
 
         {items.length ? (
           <>
-            <div className="dashboard-cards-grid">
-              {items.map((project) => {
-                const projectSections = sections.filter(
-                  (s) => s.project_id === project.id,
-                );
-                const totalWords = projectSections.reduce(
-                  (sum, s) => sum + wordCount(s.content as unknown as DocumentNode),
-                  0,
-                );
-                const isConfirming = confirmDeleteId === project.id;
+            {visibleItems.length ? (
+              <div className="dashboard-cards-grid">
+                {visibleItems.map(
+                  (
+                    {
+                      project,
+                      totalWords,
+                      draftedChapters,
+                      totalChapters,
+                      completionPct,
+                    },
+                    idx,
+                  ) => {
+                    const isConfirming = confirmDeleteId === project.id;
 
-                return (
-                  <article className="thesis-card" key={project.id}>
-                    <div className="thesis-card-top">
-                      <span className="thesis-card-icon" aria-hidden="true">
-                        <BookOpen size={17} />
-                      </span>
-                      {local && (
-                        <button
-                          type="button"
-                          className="icon-button"
-                          aria-label={`Delete ${project.title}`}
-                          onClick={() =>
-                            setConfirmDeleteId(
-                              isConfirming ? undefined : project.id,
-                            )
-                          }
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
-                    </div>
-
-                    <h2>{project.title}</h2>
-                    <p className="thesis-card-problem">
-                      {project.research_problem ||
-                        "No research question added yet."}
-                    </p>
-
-                    <div className="thesis-card-meta tabular-nums">
-                      {local ? (
-                        <span>
-                          {totalWords.toLocaleString()} words ·{" "}
-                          {projectSections.length} chapters
-                        </span>
-                      ) : (
-                        <span>Cloud project</span>
-                      )}
-                      <span>{project.citation_style.toUpperCase()}</span>
-                    </div>
-
-                    {isConfirming ? (
-                      <div className="thesis-card-confirm">
-                        <span>Remove from this browser?</span>
-                        <div>
-                          <button
-                            type="button"
-                            className="secondary"
-                            onClick={() => setConfirmDeleteId(undefined)}
-                          >
-                            Keep
-                          </button>
-                          <button
-                            type="button"
-                            className="secondary"
-                            onClick={() => handleDeleteLocal(project.id)}
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <Link
-                        className="secondary thesis-card-open"
-                        href={"/project/" + project.id}
+                    return (
+                      <article
+                        className="thesis-card"
+                        key={project.id}
+                        style={{ "--stagger": idx } as CSSProperties}
                       >
-                        Open workspace
-                        <ArrowRight size={14} />
-                      </Link>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
+                        <div className="thesis-card-top">
+                          {local ? (
+                            <ThesisProgressRing
+                              percentage={completionPct}
+                              complete={
+                                totalChapters > 0 &&
+                                draftedChapters === totalChapters
+                              }
+                            />
+                          ) : (
+                            <span
+                              className="thesis-card-icon"
+                              aria-hidden="true"
+                            >
+                              <BookOpen size={17} />
+                            </span>
+                          )}
+
+                          <div className="thesis-card-badges">
+                            <span className="thesis-card-style">
+                              {project.citation_style.toUpperCase()}
+                            </span>
+                            {local && (
+                              <button
+                                type="button"
+                                className="icon-button"
+                                aria-label={`Delete ${project.title}`}
+                                onClick={() =>
+                                  setConfirmDeleteId(
+                                    isConfirming ? undefined : project.id,
+                                  )
+                                }
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <h2>{project.title}</h2>
+                        <p className="thesis-card-problem">
+                          {project.research_problem ||
+                            "No research question added yet."}
+                        </p>
+
+                        <div className="thesis-card-meta tabular-nums">
+                          {local ? (
+                            <span>
+                              {draftedChapters}/{totalChapters} chapters drafted ·{" "}
+                              {totalWords.toLocaleString()} words
+                            </span>
+                          ) : (
+                            <span>Cloud manuscript</span>
+                          )}
+                        </div>
+
+                        {isConfirming ? (
+                          <div className="thesis-card-confirm">
+                            <span>Remove from this browser?</span>
+                            <div>
+                              <button
+                                type="button"
+                                className="secondary"
+                                onClick={() => setConfirmDeleteId(undefined)}
+                              >
+                                Keep
+                              </button>
+                              <button
+                                type="button"
+                                className="secondary"
+                                onClick={() => handleDeleteLocal(project.id)}
+                              >
+                                Delete
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <Link
+                            className="secondary thesis-card-open"
+                            href={"/project/" + project.id}
+                          >
+                            Open workspace
+                            <ArrowRight size={14} />
+                          </Link>
+                        )}
+                      </article>
+                    );
+                  },
+                )}
+              </div>
+            ) : (
+              <div className="dashboard-filter-empty">
+                <p>No theses match the selected structure filter.</p>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setFilter("all")}
+                >
+                  Show all theses
+                </button>
+              </div>
+            )}
 
             {local && (
               <aside className="local-notice">
@@ -267,11 +453,11 @@ export function Dashboard({
             <ProjectForm local={local} />
             <section className="recent-projects" aria-label="Getting started">
               <div className="dashboard-empty">
-                <Otto animate />
+                <Otto pose="welcome" size="lg" animate />
                 <h2>Room for your next idea.</h2>
                 <p>
-                  Create your first thesis to open the Split-Studio writing
-                  workspace with chapters, grounded source viewer, and Otto.
+                  Create your first thesis to open the writing workspace with
+                  chapters, grounded source viewer, and Otto.
                 </p>
                 {local && (
                   <button

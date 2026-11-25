@@ -1,4 +1,4 @@
-import type { Project, Section } from "./workspace";
+import type { CitationStyle, Project, Section } from "./workspace";
 import { chapterTitles, emptyDocument, validateDocument } from "./document";
 
 export const LOCAL_KEY = "thesisdesk-drafts-v1";
@@ -135,6 +135,22 @@ export async function updateLocalProblem(
       );
     project.research_problem = problem;
     project.revision = revision + 1;
+    project.updated_at = new Date().toISOString();
+    writeLocal(data);
+    return project;
+  });
+}
+export async function updateLocalCitationStyle(
+  projectId: string,
+  citationStyle: CitationStyle,
+) {
+  return locked(() => {
+    const data = readLocal(),
+      project = data.projects.find((item) => item.id === projectId);
+    if (!project)
+      throw new Error("Project unavailable.");
+    project.citation_style = citationStyle;
+    project.revision = (project.revision ?? 0) + 1;
     project.updated_at = new Date().toISOString();
     writeLocal(data);
     return project;

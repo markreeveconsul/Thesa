@@ -25,13 +25,19 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import type { Project, Section } from "@/lib/workspace";
+import type { CitationStyle, Project, Section } from "@/lib/workspace";
+import { wordCount, type DocumentNode } from "@/lib/document";
 import {
   readLocal,
   addLocalChapter,
   reorderLocal,
+  updateLocalCitationStyle,
 } from "@/lib/local-workspace";
-import { addChapter, reorderChapters } from "@/app/editor-actions";
+import {
+  addChapter,
+  reorderChapters,
+  updateCitationStyle,
+} from "@/app/editor-actions";
 import { sectionToMarkdown, thesisToMarkdown } from "@/lib/citations";
 import { ChapterEditor, type EditorHandle } from "./editor/ChapterEditor";
 import { ChapterNavigation } from "./ChapterNavigation";
@@ -289,6 +295,35 @@ export function Workspace({
     );
   }, []);
 
+  async function changeCitationStyle(nextStyle: CitationStyle) {
+    if (!project || project.citation_style === nextStyle) return;
+    const prevProject = project;
+    setProject({ ...project, citation_style: nextStyle });
+    try {
+      if (local) {
+        const updated = await updateLocalCitationStyle(project.id, nextStyle);
+        setProject(updated);
+      } else {
+        const result = await updateCitationStyle(
+          project.id,
+          nextStyle,
+          project.revision ?? 0,
+        );
+        if (result.error) {
+          setProject(prevProject);
+          setNotice(result.error);
+          return;
+        }
+        if (result.project) setProject(result.project);
+      }
+    } catch (e) {
+      setProject(prevProject);
+      setNotice(
+        e instanceof Error ? e.message : "Could not update citation style.",
+      );
+    }
+  }
+
   const showFeasibility = async () => {
     if (await flush()) {
       setFocus(false);
@@ -484,6 +519,24 @@ export function Workspace({
                 </div>
               </details>
 
+              <label className="topbar-citation-wrap">
+                <span className="sr-only">Citation style</span>
+                <select
+                  aria-label="Citation style"
+                  className="topbar-citation-select"
+                  value={project.citation_style}
+                  onChange={(event) =>
+                    void changeCitationStyle(
+                      event.target.value as CitationStyle,
+                    )
+                  }
+                >
+                  <option value="apa">APA</option>
+                  <option value="mla">MLA</option>
+                  <option value="ieee">IEEE</option>
+                </select>
+              </label>
+
               <button
                 type="button"
                 className="icon-button"
@@ -652,6 +705,13 @@ export function Workspace({
                 section={active}
                 chapterIndex={Math.max(0, activeIndex)}
                 chapterTotal={chapters.length}
+                otherChaptersWords={chapters
+                  .filter((item) => item.id !== active.id)
+                  .reduce(
+                    (sum, item) =>
+                      sum + wordCount(item.content as unknown as DocumentNode),
+                    0,
+                  )}
                 local={local}
                 onSaved={saved}
                 onReady={ready}
@@ -851,7 +911,7 @@ export function Workspace({
                   setViewsOpen(false);
                 }}
               >
-                <strong>Split-Studio Editor + Source Viewer</strong>
+                <strong>Editor + Source Viewer</strong>
                 <span>Chapter outline, live manuscript, and side-by-side source reader.</span>
               </button>
               <button

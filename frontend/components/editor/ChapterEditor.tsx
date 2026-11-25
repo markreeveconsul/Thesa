@@ -16,10 +16,15 @@ export type EditorHandle = {
   insertCitation: (citationText: string) => void;
 };
 
+const GOAL_STORAGE_KEY = "thesa-session-word-goal-v1";
+const sessionBaselineKey = (projectId: string) =>
+  `thesa-session-baseline-${projectId}`;
+
 export function ChapterEditor({
   section,
   chapterIndex,
   chapterTotal,
+  otherChaptersWords = 0,
   local,
   onSaved,
   onReady,
@@ -29,6 +34,7 @@ export function ChapterEditor({
   section: Section;
   chapterIndex: number;
   chapterTotal: number;
+  otherChaptersWords?: number;
   local: boolean;
   onSaved: (section: Section) => void;
   onReady: (handle: EditorHandle) => void;
@@ -40,9 +46,26 @@ export function ChapterEditor({
   const [outline, setOutline] = useState<
     { text: string; pos: number; level: number }[]
   >([]);
+  const [wordGoal, setWordGoal] = useState<number>(() => {
+    if (typeof window === "undefined") return 500;
+    const raw = Number(window.localStorage.getItem(GOAL_STORAGE_KEY));
+    return Number.isFinite(raw) && raw >= 50 && raw <= 20000 ? raw : 500;
+  });
+  const [goalOpen, setGoalOpen] = useState(false);
+  const [sessionBaseline, setSessionBaseline] = useState<number | null>(null);
+  const [citationFlash, setCitationFlash] = useState(false);
+  const flashTimerRef = useRef<number | null>(null);
+  const goalWrapRef = useRef<HTMLDivElement>(null);
   const save = useChapterSave(section, local, onSaved);
   const onChange = useRef(save.change);
   onChange.current = save.change;
+
+  useEffect(
+    () => () => {
+      if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
+    },
+    [],
+  );
 
   const editor = useEditor({
     extensions: [
@@ -95,6 +118,11 @@ export function ChapterEditor({
       insertCitation: (citationText: string) => {
         if (!editor) return;
         editor.chain().focus().insertContent(` ${citationText}`).run();
+        setCitationFlash(true);
+        if (flashTimerRef.current) window.clearTimeout(flashTimerRef.current);
+        flashTimerRef.current = window.setTimeout(() => {
+          setCitationFlash(false);
+        }, 1600);
       },
     });
   }, [onReady, save.flush, save.downloadDraft, editor]);
@@ -113,6 +141,34 @@ export function ChapterEditor({
             : "Not saved";
 
   useEffect(() => onStatus(label), [label, onStatus]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const key = sessionBaselineKey(section.project_id);
+    const existing = window.sessionStorage.getItem(key);
+    const initialTotal =
+      otherChaptersWords + wordCount(section.content as DocumentNode);
+    if (existing !== null && Number.isFinite(Number(existing))) {
+      setSessionBaseline(Number(existing));
+    } else {
+      window.sessionStorage.setItem(key, String(initialTotal));
+      setSessionBaseline(initialTotal);
+    }
+  }, [section.project_id]); // anchor once per project session
+
+  useEffect(() => {
+    if (!goalOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      if (
+        goalWrapRef.current &&
+        !goalWrapRef.current.contains(event.target as Node)
+      ) {
+        setGoalOpen(false);
+      }
+    }
+    window.addEventListener("mousedown", onPointerDown);
+    return () => window.removeEventListener("mousedown", onPointerDown);
+  }, [goalOpen]);
 
   if (!editor)
     return (
@@ -185,7 +241,12 @@ export function ChapterEditor({
         role="region"
         aria-label="Writing surface"
       >
-        <article className="document-paper live-paper">
+        <article
+          className={
+            "document-paper live-paper is-chapter-enter" +
+            (citationFlash ? " is-citation-flash" : "")
+          }
+        >
           <div className="paper-chapter-kicker">
             Chapter {chapterIndex + 1} of {chapterTotal}
           </div>
@@ -297,10 +358,120 @@ export function ChapterEditor({
         </article>
       </div>
       <footer className="document-status">
-        <span role="status">{label}</span>
-        <span className="tabular-nums">
-          {wordCount(json).toLocaleString()} words · {local ? "Browser draft" : "Cloud draft"}
+        <span className="status-left">
+          <span role="status">{label}</span>
+          {citationFlash && (
+            <span className="citation-flash-note" role="status">
+              · Citation inserted
+            </span>
+          )}
         </span>
+        {(() => {
+          const chapterWords = wordCount(json);
+          const readingMinutes = Math.max(1, Math.round(chapterWords / 225));
+          const totalProjectWords = otherChaptersWords + chapterWords;
+          const baseline = sessionBaseline ?? totalProjectWords;
+          const sessionDelta = Math.max(0, totalProjectWords - baseline);
+          const progressPct = Math.min(
+            100,
+            Math.round((sessionDelta / Math.max(1, wordGoal)) * 100),
+          );
+          const goalMet = sessionDelta >= wordGoal;
+
+          return (
+            <div className="status-metrics-row tabular-nums">
+              <span>
+                {chapterWords.toLocaleString()} words · ~{readingMinutes} min read
+              </span>
+              <span aria-hidden="true" className="status-sep">
+                ·
+              </span>
+              <div className="session-goal-wrap" ref={goalWrapRef}>
+                <button
+                  type="button"
+                  className={
+                    "session-goal-trigger" + (goalMet ? " is-complete" : "")
+                  }
+                  aria-expanded={goalOpen}
+                  onClick={() => setGoalOpen((v) => !v)}
+                  title="Edit session word goal"
+                >
+                  <span>
+                    Session: +{sessionDelta.toLocaleString()} /{" "}
+                    {wordGoal.toLocaleString()}
+                  </span>
+                  <span className="session-goal-track" aria-hidden="true">
+                    <span
+                      className="session-goal-fill"
+                      style={{ transform: `scaleX(${progressPct / 100})` }}
+                    />
+                  </span>
+                </button>
+                {goalOpen && (
+                  <div className="session-goal-popover" role="dialog" aria-label="Session word goal">
+                    <div className="session-goal-head">
+                      <strong>Session word goal</strong>
+                      <span>{progressPct}%</span>
+                    </div>
+                    <div className="session-goal-presets">
+                      {[250, 500, 1000, 1500].map((preset) => (
+                        <button
+                          key={preset}
+                          type="button"
+                          className={wordGoal === preset ? "active" : ""}
+                          onClick={() => {
+                            setWordGoal(preset);
+                            window.localStorage.setItem(
+                              GOAL_STORAGE_KEY,
+                              String(preset),
+                            );
+                          }}
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                    <label className="session-goal-custom">
+                      <span>Custom target</span>
+                      <input
+                        type="number"
+                        min={50}
+                        max={20000}
+                        step={50}
+                        value={wordGoal}
+                        onChange={(e) => {
+                          const next = Math.max(
+                            50,
+                            Math.min(20000, Number(e.target.value) || 500),
+                          );
+                          setWordGoal(next);
+                          window.localStorage.setItem(
+                            GOAL_STORAGE_KEY,
+                            String(next),
+                          );
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="text-button"
+                      onClick={() => {
+                        window.sessionStorage.setItem(
+                          sessionBaselineKey(section.project_id),
+                          String(totalProjectWords),
+                        );
+                        setSessionBaseline(totalProjectWords);
+                        setGoalOpen(false);
+                      }}
+                    >
+                      Reset session count
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
       </footer>
     </div>
   );
