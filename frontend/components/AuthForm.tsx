@@ -162,7 +162,7 @@ export function AuthForm({
               {pending
                 ? "Please wait…"
                 : mode === "login"
-                  ? "Sign in"
+                  ? "Log in"
                   : mode === "signup"
                     ? "Create account"
                     : mode === "reset"
@@ -206,6 +206,16 @@ export function AuthForm({
               >
                 {mode === "reset" ? "Back to sign in" : "Forgot password?"}
               </button>
+            </div>
+          )}
+          {!configured && (
+            <div className="auth-preview-links">
+              <Link className="primary" href="/">
+                Open Split-Studio Workspace <ArrowRight size={15} />
+              </Link>
+              <Link className="secondary" href="/?library=1">
+                Browse Thesis Library
+              </Link>
             </div>
           )}
         </section>

@@ -14,7 +14,9 @@ A thesis-writing workspace built with Next.js, Tiptap and Supabase, with a local
 
 **Source uploads and reading work for browser drafts and signed-in cloud projects.** PDF/DOCX/TXT files are parsed by the local Python/FastAPI service. Browser drafts save in IndexedDB; signed-in sources save in the private Supabase bucket with owner-checked database functions. The reader supports original PDF rendering, page navigation, zoom, text search and original-file download. See [source setup and limits](docs/SOURCE_UPLOADS.md).
 
-**Otto source chat is a local preview.** After [AI setup](docs/AI_SETUP.md), Otto uses semantic plus keyword search over the selected project's sources, then Gemini writes a conversational answer grounded in retrieved passages. Follow-up questions use a short in-memory chat context, and each answer shows the original quotation with a clickable file/page location. Unsupported questions abstain; provider errors stay explicit. Chat is not saved, and citation insertion, notes and DOCX/PDF export remain pending.
+**Otto source chat is a local preview.** After [AI setup](docs/AI_SETUP.md), Otto uses semantic plus keyword search over the selected project's sources, then Gemini writes a conversational answer grounded in retrieved passages. Follow-up questions use a short in-memory chat context, and each answer shows the original quotation with a clickable file/page location. Unsupported questions abstain; provider errors stay explicit. Chat is not saved.
+
+**Feasibility review is available per project.** It collects a study plan, optionally sends up to 10 locally selected source excerpts to a separate Groq model, validates returned citations against the project's sources, and saves each result as a separate report. Signed-in reports use owner-protected Supabase storage; browser-draft reports stay in that browser. See [the feasibility spec](docs/FEASIBILITY_CHECKER_SPEC.md). Otto's chat still uses Gemini; the two features have separate provider settings and request routes.
 
 This Gemini trial uses a hosted proprietary model and does not meet the original open-source AI requirement. Free-tier quotas still apply, and Google may use free-tier prompts to improve its products; use synthetic or non-sensitive material while evaluating it.
 
@@ -52,7 +54,7 @@ At a high level:
    .\frontend\node_modules\.bin\supabase.cmd link --project-ref YOUR_PROJECT_REF
    .\frontend\node_modules\.bin\supabase.cmd db push
    ~~~
-   This applies all four migrations, including private source storage and the editor revision functions. Existing browser drafts are not migrated automatically.
+   This applies all five migrations, including private source storage, editor revision functions and owner-protected feasibility reports. Existing browser drafts are not migrated automatically.
 3. Configure the Auth redirect allow-list and email confirmation in the Supabase dashboard, then restart Next.js.
 4. Verify signup, confirmation, login, recovery, two-user isolation and cloud autosave against the hosted project before release.
 
@@ -77,9 +79,11 @@ See frontend/.env.example (copy to frontend/.env.local; Next.js does not read th
 | GEMINI_API_KEY / GEMINI_API_BASE_URL | Backend-only Gemini API key and API base URL |
 | AI_CHAT_MODEL / AI_EMBED_MODEL | Swap chat and embedding model IDs without code changes |
 | AI_EMBED_DIMENSIONS / AI_RETRIEVAL_MIN_SCORE | Embedding vector size and semantic match threshold |
+| FEASIBILITY_GROQ_API_KEY / FEASIBILITY_GROQ_BASE_URL | Separate backend-only Groq provider for feasibility reviews |
+| FEASIBILITY_GROQ_MODEL | Feasibility model ID; defaults to `openai/gpt-oss-20b` |
 | MAX_UPLOAD_MB / MAX_PDF_PAGES | Planned ingestion caps: 25 MB / 300 pages |
 
-The active Python AI adapter reads the Gemini settings from **backend/.env**. Never put the key in frontend variables or commit it. See [AI_SETUP.md](docs/AI_SETUP.md) for setup, privacy and quota details.
+Copy `backend/.env.example` to `backend/.env`, then add the Groq key to `FEASIBILITY_GROQ_API_KEY` to enable feasibility reviews. Otto reads the separate Gemini settings from the same backend file. Never put either key in frontend variables or commit them. Review provider data-use terms and quotas before sending thesis material.
 
 ## Tests
 
@@ -94,7 +98,7 @@ npm run test:e2e
 
 Run build and browser tests sequentially because Next.js updates shared generated type files.
 
-Vitest executes the actual migrations in PGlite and tests authentication-role isolation, column grants, storage policies, atomic project/template creation, revision conflicts and all-or-nothing chapter reordering. Supabase-managed auth/storage plumbing is substituted; its HTTP APIs are not exercised.
+Vitest executes the actual migrations in PGlite and tests authentication-role isolation, column grants, storage policies, feasibility report isolation, atomic project/template creation, revision conflicts and all-or-nothing chapter reordering. Supabase-managed auth/storage plumbing is substituted; its HTTP APIs are not exercised.
 
 Other unit tests cover document validation, word count, search across formatting boundaries and serialized autosave, including edits made during in-flight saves and failures.
 
@@ -117,6 +121,6 @@ The original C:\Users\Admin\thesis-assistant checkout is unchanged. Work is in t
 - Browser backups are per chapter; bulk import/export and cloud draft migration are not implemented.
 - Large-document performance and full assistive-technology review remain final-MVP checks.
 - Browser drafts store sources in IndexedDB; signed-in cloud projects store originals privately in Supabase. Both currently use the local loopback parser; hosted parsing and durable background ingestion remain pending.
-- Then: grounded assistant, selected-text/RRL review, accepted suggestions, bibliography, notes and exports.
+- Then: hosted parsing, durable ingestion/indexing, selected-text/RRL review, accepted suggestions, bibliography, notes and exports.
 
 No OCR, collaboration, sharing, paper discovery, plagiarism checks or unverifiable alignment/AI-detection percentages are included.
