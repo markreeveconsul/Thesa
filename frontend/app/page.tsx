@@ -19,10 +19,17 @@ export default async function Home({
     data: { user },
   } = await client.auth.getUser();
   if (!user) redirect("/auth");
-  const { data, error } = await client
-    .from("projects")
-    .select("*")
-    .order("updated_at", { ascending: false });
-  if (error) throw new Error("Could not load projects.");
-  return <Dashboard local={false} projects={(data ?? []) as Project[]} />;
+  const [projectsResult, sectionsResult] = await Promise.all([
+    client.from("projects").select("*").order("updated_at", { ascending: false }),
+    client.from("sections").select("project_id,content"),
+  ]);
+  if (projectsResult.error || sectionsResult.error)
+    throw new Error("Could not load your thesis library.");
+  return (
+    <Dashboard
+      local={false}
+      projects={(projectsResult.data ?? []) as Project[]}
+      initialSections={sectionsResult.data ?? []}
+    />
+  );
 }

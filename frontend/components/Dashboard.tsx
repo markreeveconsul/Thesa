@@ -3,7 +3,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type CSSProperties } from "react";
-import { ArrowRight, BookOpen, Plus, Trash2, X } from "lucide-react";
+import { ArrowRight, Plus, Trash2, X } from "lucide-react";
 import { Brand } from "./Brand";
 import { Otto } from "./Otto";
 import { ProjectForm } from "./ProjectForm";
@@ -19,6 +19,7 @@ import type { Project, Section } from "@/lib/workspace";
 
 type StructureFilter = "all" | "five-chapter" | "blank";
 type SortMode = "recent" | "words" | "title";
+type DashboardSection = Pick<Section, "project_id" | "content">;
 
 function ThesisProgressRing({
   percentage,
@@ -66,15 +67,17 @@ function ThesisProgressRing({
 export function Dashboard({
   local,
   projects,
+  initialSections = [],
   autoOpen = false,
 }: {
   local: boolean;
   projects: Project[];
+  initialSections?: DashboardSection[];
   autoOpen?: boolean;
 }) {
   const router = useRouter();
   const [items, setItems] = useState(projects);
-  const [sections, setSections] = useState<Section[]>([]);
+  const [sections, setSections] = useState<DashboardSection[]>(initialSections);
   const [error, setError] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string>();
@@ -194,7 +197,7 @@ export function Dashboard({
       filter === "all" ? true : entry.inferredStructure === filter,
     )
     .sort((a, b) => {
-      if (sortBy === "words" && local) {
+      if (sortBy === "words") {
         return b.totalWords - a.totalWords;
       }
       if (sortBy === "title") {
@@ -254,9 +257,7 @@ export function Dashboard({
             <p className="tabular-nums">
               {items.length > 0
                 ? `${items.length} ${items.length === 1 ? "manuscript" : "manuscripts"}${
-                    local
-                      ? ` · ${libraryTotalWords.toLocaleString()} words total`
-                      : ""
+                    ` · ${libraryTotalWords.toLocaleString()} words total`
                   }`
                 : "Open a manuscript to write alongside your sources, or start a new research project."}
             </p>
@@ -296,7 +297,7 @@ export function Dashboard({
                   onChange={(event) => setSortBy(event.target.value as SortMode)}
                 >
                   <option value="recent">Recently updated</option>
-                  {local && <option value="words">Most words</option>}
+                  <option value="words">Most words</option>
                   <option value="title">Title A–Z</option>
                 </select>
               </label>
@@ -334,22 +335,13 @@ export function Dashboard({
                         style={{ "--stagger": idx } as CSSProperties}
                       >
                         <div className="thesis-card-top">
-                          {local ? (
-                            <ThesisProgressRing
-                              percentage={completionPct}
-                              complete={
-                                totalChapters > 0 &&
-                                draftedChapters === totalChapters
-                              }
-                            />
-                          ) : (
-                            <span
-                              className="thesis-card-icon"
-                              aria-hidden="true"
-                            >
-                              <BookOpen size={17} />
-                            </span>
-                          )}
+                          <ThesisProgressRing
+                            percentage={completionPct}
+                            complete={
+                              totalChapters > 0 &&
+                              draftedChapters === totalChapters
+                            }
+                          />
 
                           <div className="thesis-card-badges">
                             <span className="thesis-card-style">
@@ -379,14 +371,10 @@ export function Dashboard({
                         </p>
 
                         <div className="thesis-card-meta tabular-nums">
-                          {local ? (
-                            <span>
-                              {draftedChapters}/{totalChapters} chapters drafted ·{" "}
-                              {totalWords.toLocaleString()} words
-                            </span>
-                          ) : (
-                            <span>Cloud manuscript</span>
-                          )}
+                          <span>
+                            {draftedChapters}/{totalChapters} chapters drafted ·{" "}
+                            {totalWords.toLocaleString()} words
+                          </span>
                         </div>
 
                         {isConfirming ? (
