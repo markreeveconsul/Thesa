@@ -1,6 +1,7 @@
 "use client";
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { Otto } from "./Otto";
 import {
   ArrowUp,
   BookOpen,
@@ -306,6 +307,8 @@ export function SourceStudioDrawer({
   // --- Sources Upload & Library state ---
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadAbort = useRef<AbortController | null>(null);
+  const dragDepthRef = useRef(0);
+  const [isDragging, setIsDragging] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadStage, setUploadStage] = useState("");
   const [uploadErrors, setUploadErrors] = useState<string[]>([]);
@@ -367,7 +370,13 @@ export function SourceStudioDrawer({
     <aside className="studio-drawer" aria-label="Research and source studio">
       <header className="studio-drawer-head">
         <div className="studio-drawer-brand">
-          <Image src="/otto/otto-head-512.png" width={28} height={28} alt="" />
+          <Image
+            src="/mascot/scholar-reading.jpg"
+            width={28}
+            height={28}
+            alt=""
+            className="studio-brand-avatar"
+          />
           <strong>Research Studio</strong>
         </div>
         <button
@@ -380,7 +389,16 @@ export function SourceStudioDrawer({
         </button>
       </header>
 
-      <div className="studio-tabs" role="tablist" aria-label="Studio panels">
+      <div
+        className="studio-tabs"
+        role="tablist"
+        aria-label="Studio panels"
+        style={
+          {
+            "--tab-index": tab === "viewer" ? 0 : tab === "otto" ? 1 : 2,
+          } as CSSProperties
+        }
+      >
         <button
           type="button"
           role="tab"
@@ -408,11 +426,17 @@ export function SourceStudioDrawer({
         >
           Sources ({sources.length})
         </button>
+        <span className="studio-tab-indicator" aria-hidden="true" />
       </div>
 
       {/* TAB 1: SOURCE VIEWER */}
       {tab === "viewer" && (
-        <div className="studio-body" role="tabpanel" aria-label="Source Viewer">
+        <div
+          key="viewer"
+          className="studio-body studio-panel-anim"
+          role="tabpanel"
+          aria-label="Source Viewer"
+        >
           {!sources.length ? (
             <div className="studio-empty">
               <FileText size={30} />
@@ -634,15 +658,23 @@ export function SourceStudioDrawer({
 
       {/* TAB 2: OTTO ASSISTANT */}
       {tab === "otto" && (
-        <div className="studio-otto" role="tabpanel" aria-label="Otto assistant">
+        <div
+          key="otto"
+          className="studio-otto studio-panel-anim"
+          role="tabpanel"
+          aria-label="Otto assistant"
+        >
           <div className="otto-log" ref={chatLogRef} tabIndex={0}>
             {!messages.length && (
               <div className="otto-welcome-box">
-                <p>
-                  Ask naturally about your uploaded sources. Otto returns
-                  source-grounded answers with exact quotations and page
-                  locations you can inspect or cite directly.
-                </p>
+                <div className="otto-welcome-head">
+                  <Otto pose="reading" size="sm" />
+                  <p>
+                    Ask naturally about your uploaded sources. Otto returns
+                    source-grounded answers with exact quotations and page
+                    locations you can inspect or cite directly.
+                  </p>
+                </div>
                 <div className="otto-quick-actions">
                   <button
                     type="button"
@@ -807,7 +839,12 @@ export function SourceStudioDrawer({
 
       {/* TAB 3: SOURCES LIBRARY */}
       {tab === "sources" && (
-        <div className="studio-body" role="tabpanel" aria-label="Sources">
+        <div
+          key="sources"
+          className="studio-body studio-panel-anim"
+          role="tabpanel"
+          aria-label="Sources"
+        >
           <input
             ref={fileInputRef}
             className="sr-only"
@@ -824,17 +861,34 @@ export function SourceStudioDrawer({
 
           <button
             type="button"
-            className="source-dropzone"
+            className={"source-dropzone" + (isDragging ? " is-dragging" : "")}
             disabled={uploadBusy}
             onClick={() => fileInputRef.current?.click()}
-            onDragOver={(e) => e.preventDefault()}
+            onDragEnter={(e) => {
+              e.preventDefault();
+              dragDepthRef.current += 1;
+              setIsDragging(true);
+            }}
+            onDragOver={(e) => {
+              e.preventDefault();
+              if (!isDragging) setIsDragging(true);
+            }}
+            onDragLeave={(e) => {
+              e.preventDefault();
+              dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+              if (dragDepthRef.current === 0) setIsDragging(false);
+            }}
             onDrop={(e) => {
               e.preventDefault();
+              dragDepthRef.current = 0;
+              setIsDragging(false);
               void handleFiles(Array.from(e.dataTransfer.files));
             }}
           >
             <Upload size={20} />
-            <strong>Upload PDF, DOCX, or TXT</strong>
+            <strong>
+              {isDragging ? "Drop to add to project" : "Upload PDF, DOCX, or TXT"}
+            </strong>
             <span>Drop files here or click to browse · 25 MB max</span>
           </button>
 

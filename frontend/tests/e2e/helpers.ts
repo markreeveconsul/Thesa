@@ -1,10 +1,18 @@
 import { expect, type Page } from "@playwright/test";
+
 export async function createThesis(
   page: Page,
   title = "Learning and feedback",
   structure = "five-chapter",
 ) {
-  await page.goto("/");
+  await page.goto("/?library=1");
+  const newThesisBtn = page.getByRole("button", {
+    name: "New thesis",
+    exact: true,
+  });
+  if (await newThesisBtn.isVisible().catch(() => false)) {
+    await newThesisBtn.click();
+  }
   await page
     .getByRole("textbox", { name: "Working title", exact: true })
     .fill(title);
@@ -19,13 +27,15 @@ export async function createThesis(
     .click();
   // The development server compiles this route on its first visit.
   await expect(page).toHaveURL(/\/project\/[a-f0-9-]+$/, { timeout: 30000 });
-  if (structure !== "blank")
+  if (structure !== "blank") {
     await expect(
       page.getByRole("textbox", { name: "Chapter content", exact: true }),
     ).toBeVisible();
+  }
 }
+
 export async function saved(page: Page) {
   await expect(
-    page.getByRole("status").filter({ hasText: "Saved in this browser" }),
+    page.getByRole("status").filter({ hasText: "Saved in browser" }),
   ).toBeVisible();
 }

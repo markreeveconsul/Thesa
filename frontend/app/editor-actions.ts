@@ -2,7 +2,7 @@
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
 import { documentSchema, emptyDocument } from "@/lib/document";
-import type { Project, Section } from "@/lib/workspace";
+import type { CitationStyle, Project, Section } from "@/lib/workspace";
 import type { SaveResult } from "@/lib/local-workspace";
 
 const sectionSchema = z.object({
@@ -107,6 +107,33 @@ export async function updateResearchProblem(
     ? {
         error:
           "The project changed or could not be saved. Reload before trying again.",
+      }
+    : { project: data as Project };
+}
+export async function updateCitationStyle(
+  projectId: string,
+  citationStyle: CitationStyle,
+  revision: number,
+): Promise<{ project?: Project; error?: string }> {
+  if (
+    !z.string().uuid().safeParse(projectId).success ||
+    !z.enum(["apa", "mla", "ieee"]).safeParse(citationStyle).success ||
+    !Number.isInteger(revision) ||
+    revision < 0
+  )
+    return { error: "Invalid citation style." };
+  const client = await createClient();
+  const { data, error } = await client
+    .from("projects")
+    .update({ citation_style: citationStyle, revision: revision + 1 })
+    .eq("id", projectId)
+    .eq("revision", revision)
+    .select("*")
+    .maybeSingle();
+  return error || !data
+    ? {
+        error:
+          "The project changed or could not update citation style. Reload before trying again.",
       }
     : { project: data as Project };
 }

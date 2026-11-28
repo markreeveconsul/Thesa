@@ -57,15 +57,23 @@ function assertBounded(pages: ExtractedPage[]): ExtractedPage[] {
   return pages;
 }
 
-function decodeXmlEntities(input: string): string {
-  return input
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&#(\d+);/g, (_, num) => String.fromCodePoint(Number(num)))
-    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)));
+export function decodeXmlEntities(input: string): string {
+  const namedEntities: Record<string, string> = {
+    "&amp;": "&",
+    "&lt;": "<",
+    "&gt;": ">",
+    "&quot;": '"',
+    "&apos;": "'",
+  };
+  return input.replace(
+    /&(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);/g,
+    (entity) => {
+      if (namedEntities[entity] !== undefined) return namedEntities[entity];
+      const hexadecimal = entity.startsWith("&#x");
+      const value = entity.slice(hexadecimal ? 3 : 2, -1);
+      return String.fromCodePoint(Number.parseInt(value, hexadecimal ? 16 : 10));
+    },
+  );
 }
 
 function readZipEntry(buffer: Buffer, targetName: string): { data: Buffer; totalExpanded: number; entryCount: number } {

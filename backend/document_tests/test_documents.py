@@ -40,6 +40,12 @@ def test_pdf_physical_pages_and_empty_page_warning(client):
     assert len(data["sha256"]) == 64
 
 
+def test_health_reports_launcher_workspace(client, monkeypatch):
+    monkeypatch.setenv("THESA_WORKSPACE_MARKER", "this-worktree")
+    response = client.get("/health")
+    assert response.json()["workspace"] == "this-worktree"
+
+
 def test_docx_paragraphs_and_table_rows(client):
     doc = Document(); doc.add_paragraph("Study objective")
     row = doc.add_table(rows=1, cols=2).rows[0]

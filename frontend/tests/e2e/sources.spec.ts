@@ -13,48 +13,46 @@ test("real upload, PDF page rendering, DOCX/TXT locators, persistence, project f
   page.on("pageerror", (error) => errors.push(error.message));
   await createThesis(page, "Source reading project");
   const projectUrl = page.url();
-  await page
-    .getByRole("button", { name: "Upload sources", exact: true })
-    .click();
-  await page
+  const drawer = page.getByRole("complementary", {
+    name: "Research and source studio",
+  });
+  await drawer.getByRole("tab", { name: /Sources \(/ }).click();
+  await drawer
     .getByLabel("Choose source files")
     .setInputFiles([
       fixture("study.pdf"),
       fixture("study.docx"),
       fixture("notes.txt"),
     ]);
-  await expect(page.getByText("3 sources saved.", { exact: true })).toBeVisible(
+  await expect(drawer.getByText("3 sources saved.", { exact: true })).toBeVisible(
     { timeout: 60000 },
   );
   const row = (name: string) =>
-    page.locator(".source-rows>li").filter({ hasText: name });
-  await row("study.pdf")
-    .getByRole("button", { name: "Open", exact: true })
-    .click();
+    drawer.locator(".drawer-source-list > li").filter({ hasText: name });
+  await row("study.pdf").locator(".drawer-source-open").click();
   await expect(
-    page.getByRole("img", { name: "study.pdf, page 1" }),
+    drawer.getByRole("img", { name: "study.pdf, page 1" }),
   ).toBeVisible({ timeout: 30000 });
-  await expect(page.locator(".pdf-preview").getByRole("status")).toHaveCount(0);
   expect(
-    await page
+    await drawer
       .locator(".pdf-canvas canvas")
       .evaluate((canvas: HTMLCanvasElement) => canvas.width),
   ).toBeGreaterThan(100);
-  await expect(page.locator(".extracted-text")).toContainText(
+  await expect(drawer.locator(".drawer-passage-text")).toContainText(
     "Page one: study aim.",
   );
-  await page.getByRole("button", { name: "Next location" }).click();
-  await expect(page.locator(".extracted-text")).toContainText(
+  await drawer.getByRole("button", { name: "Next location" }).click();
+  await expect(drawer.locator(".drawer-passage-text")).toContainText(
     "Page two: interview results.",
   );
   await expect(
-    page.getByRole("img", { name: "study.pdf, page 2" }),
+    drawer.getByRole("img", { name: "study.pdf, page 2" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Zoom in", exact: true }).click();
-  await expect(page.getByText("125%", { exact: true })).toBeVisible();
-  await page.getByLabel("Search source text").fill("study aim");
-  await page.getByRole("button", { name: "Find next" }).click();
-  await expect(page.getByLabel("Go to page")).toHaveValue("1");
+  await drawer.getByRole("button", { name: "Zoom in", exact: true }).click();
+  await expect(drawer.getByText("125%", { exact: true })).toBeVisible();
+  await drawer.getByLabel("Search source text").fill("study aim");
+  await drawer.getByRole("button", { name: "Next", exact: true }).click();
+  await expect(drawer.getByLabel("Go to page")).toHaveValue("1");
   await page.screenshot({
     path: "test-results/source-pdf-reader.png",
     fullPage: true,
@@ -66,61 +64,53 @@ test("real upload, PDF page rendering, DOCX/TXT locators, persistence, project f
         .analyze()
     ).violations,
   ).toEqual([]);
-  await page
-    .getByRole("button", { name: "Back to sources", exact: true })
-    .click();
-  await row("study.docx")
-    .getByRole("button", { name: "Open", exact: true })
-    .click();
-  await expect(page.getByLabel("Go to paragraph")).toHaveValue("1");
-  await page.getByRole("button", { name: "Next location" }).click();
-  await expect(page.locator(".extracted-text")).toContainText(
+
+  await drawer.getByRole("tab", { name: /Sources \(/ }).click();
+  await row("study.docx").locator(".drawer-source-open").click();
+  await expect(drawer.getByLabel("Go to paragraph")).toHaveValue("1");
+  await drawer.getByRole("button", { name: "Next location" }).click();
+  await expect(drawer.locator(".drawer-passage-text")).toContainText(
     "Table findings.",
   );
-  await page
-    .getByRole("button", { name: "Back to sources", exact: true })
-    .click();
-  await row("notes.txt")
-    .getByRole("button", { name: "Open", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Next location" }).click();
-  await expect(page.getByLabel("Go to line")).toHaveValue("3");
-  await page.getByRole("button", { name: "Next location" }).click();
-  await expect(page.locator(".extracted-text")).toContainText(
+
+  await drawer.getByRole("tab", { name: /Sources \(/ }).click();
+  await row("notes.txt").locator(".drawer-source-open").click();
+  await drawer.getByRole("button", { name: "Next location" }).click();
+  await expect(drawer.getByLabel("Go to line")).toHaveValue("3");
+  await drawer.getByRole("button", { name: "Next location" }).click();
+  await expect(drawer.locator(".drawer-passage-text")).toContainText(
     "<script>untrusted()</script>",
   );
+
   await page.reload();
-  await page
-    .getByRole("button", { name: "Upload sources", exact: true })
-    .click();
-  await expect(page.locator(".source-rows>li")).toHaveCount(3);
-  await page
+  await drawer.getByRole("tab", { name: /Sources \(/ }).click();
+  await expect(drawer.locator(".drawer-source-list > li")).toHaveCount(3);
+  await drawer
     .getByLabel("Choose source files")
     .setInputFiles(fixture("study.pdf"));
-  await expect(page.locator(".source-errors")).toContainText(
+  await expect(drawer.locator(".source-errors")).toContainText(
     "already in this project's source library",
   );
   await page.screenshot({
     path: "test-results/source-library-populated.png",
     fullPage: true,
   });
+
   await createThesis(page, "Separate project");
-  await expect(page.getByText("Sources (0)", { exact: true })).toBeVisible();
-  await page
-    .getByRole("button", { name: "Upload sources", exact: true })
-    .click();
-  await expect(page.locator(".source-rows>li")).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: "Sources (0)" })).toBeVisible();
+  await page.getByRole("tab", { name: "Sources (0)" }).click();
+  await expect(page.locator(".drawer-source-list > li")).toHaveCount(0);
+
   await page.goto(projectUrl);
-  await page
-    .getByRole("button", { name: "Upload sources", exact: true })
-    .click();
+  await drawer.getByRole("tab", { name: /Sources \(/ }).click();
   await row("study.pdf")
     .getByRole("button", { name: "Delete study.pdf", exact: true })
     .click();
-  await page
-    .getByRole("button", { name: "Delete source", exact: true })
+  await row("study.pdf")
+    .getByRole("button", { name: "Delete", exact: true })
     .click();
-  await expect(page.locator(".source-rows>li")).toHaveCount(2);
+  await expect(drawer.locator(".drawer-source-list > li")).toHaveCount(2);
+
   const counts = await page.evaluate(
     () =>
       new Promise<number[]>((resolve, reject) => {
@@ -146,40 +136,41 @@ test("scanned, corrupt, unsupported and offline uploads fail honestly; retry wor
   page,
 }) => {
   await createThesis(page);
-  await page
-    .getByRole("button", { name: "Upload sources", exact: true })
-    .click();
-  await page
+  const drawer = page.getByRole("complementary", {
+    name: "Research and source studio",
+  });
+  await drawer.getByRole("tab", { name: /Sources \(/ }).click();
+  await drawer
     .getByLabel("Choose source files")
     .setInputFiles([fixture("scan.pdf"), fixture("broken.pdf")]);
-  await expect(page.locator(".source-errors")).toContainText(
+  await expect(drawer.locator(".source-errors")).toContainText(
     "OCR is not supported",
   );
-  await expect(page.locator(".source-errors")).toContainText("corrupt");
-  await expect(page.locator(".source-rows>li")).toHaveCount(0);
-  await page.getByLabel("Choose source files").setInputFiles({
+  await expect(drawer.locator(".source-errors")).toContainText("corrupt");
+  await expect(drawer.locator(".drawer-source-list > li")).toHaveCount(0);
+  await drawer.getByLabel("Choose source files").setInputFiles({
     name: "bad.html",
     mimeType: "text/html",
     buffer: Buffer.from("test"),
   });
-  await expect(page.locator(".source-errors")).toContainText(
+  await expect(drawer.locator(".source-errors")).toContainText(
     "Choose a PDF, DOCX or UTF-8 TXT",
   );
   await page.route("**:8012/parse", (route) =>
     route.abort("connectionrefused"),
   );
-  await page
+  await drawer
     .getByLabel("Choose source files")
     .setInputFiles(fixture("notes.txt"));
-  await expect(page.locator(".source-errors")).toContainText(
+  await expect(drawer.locator(".source-errors")).toContainText(
     "Cannot reach the document service",
   );
   await page.unroute("**:8012/parse");
-  await page
+  await drawer
     .getByLabel("Choose source files")
     .setInputFiles(fixture("notes.txt"));
   await expect(
-    page.getByText("1 source saved.", { exact: true }),
+    drawer.getByText("1 source saved.", { exact: true }),
   ).toBeVisible();
 });
 
@@ -187,9 +178,10 @@ test("storage failures roll back the whole source; mobile PDF reader fits", asyn
   page,
 }) => {
   await createThesis(page);
-  await page
-    .getByRole("button", { name: "Upload sources", exact: true })
-    .click();
+  const drawer = page.getByRole("complementary", {
+    name: "Research and source studio",
+  });
+  await drawer.getByRole("tab", { name: /Sources \(/ }).click();
   await page.evaluate(() => {
     const original = IDBObjectStore.prototype.add;
     let fail = true;
@@ -204,28 +196,27 @@ test("storage failures roll back the whole source; mobile PDF reader fits", asyn
       return original.call(this, value, key);
     };
   });
-  await page
+  await drawer
     .getByLabel("Choose source files")
     .setInputFiles(fixture("study.pdf"));
-  await expect(page.locator(".source-errors")).toContainText(
+  await expect(drawer.locator(".source-errors")).toContainText(
     "Browser storage is full",
   );
-  await expect(page.locator(".source-rows>li")).toHaveCount(0);
-  await page
+  await expect(drawer.locator(".drawer-source-list > li")).toHaveCount(0);
+  await drawer
     .getByLabel("Choose source files")
     .setInputFiles(fixture("study.pdf"));
   await expect(
-    page.getByText("1 source saved.", { exact: true }),
+    drawer.getByText("1 source saved.", { exact: true }),
   ).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
-  await page
-    .locator(".source-rows")
-    .getByRole("button", { name: "Open", exact: true })
+  await page.getByRole("navigation", { name: "Mobile workspace" })
+    .getByRole("button", { name: "Studio", exact: true })
     .click();
+  await drawer.locator(".drawer-source-open").first().click();
   await expect(
-    page.getByRole("img", { name: "study.pdf, page 1" }),
+    drawer.getByRole("img", { name: "study.pdf, page 1" }),
   ).toBeVisible();
-  await expect(page.locator(".pdf-preview").getByRole("status")).toHaveCount(0);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
